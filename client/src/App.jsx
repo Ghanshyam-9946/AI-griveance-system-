@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import GrievanceForm from './components/GrievanceForm';
 import Dashboard from './components/Dashboard';
-import { LayoutDashboard, Send } from 'lucide-react';
+import TrackStatus from './components/TrackStatus';
+import { LayoutDashboard, Send, Search } from 'lucide-react';
 
 function App() {
   const [view, setView] = useState('citizen'); // 'citizen' or 'admin'
@@ -22,7 +23,14 @@ function App() {
             onClick={() => setView('citizen')}
             style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem' }}
           >
-            <Send size={18} /> Citizen Portal
+            <Send size={18} /> Report Issue
+          </button>
+          <button 
+            className={view === 'track' ? 'btn-primary' : 'glass'} 
+            onClick={() => setView('track')}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem' }}
+          >
+            <Search size={18} /> Track Status
           </button>
           <button 
             className={view === 'admin' ? 'btn-primary' : 'glass'} 
@@ -42,6 +50,14 @@ function App() {
               <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>Our AI will automatically categorize and route your issue to the right department.</p>
             </header>
             <GrievanceForm />
+          </div>
+        ) : view === 'track' ? (
+          <div className="animate-fade-in">
+             <header style={{ marginBottom: '2rem', textAlign: 'center' }}>
+              <h1 style={{ fontSize: '2.5rem' }}>Track <span className="gradient-text">Grievance</span></h1>
+              <p style={{ color: 'var(--text-muted)' }}>Enter your tracking ID to see the current status of your request.</p>
+            </header>
+            <TrackStatus />
           </div>
         ) : (
           <div className="animate-fade-in">

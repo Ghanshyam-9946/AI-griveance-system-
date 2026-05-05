@@ -23,8 +23,10 @@ const GrievanceSchema = new mongoose.Schema({
     type: String,
     enum: [
       'Municipal Corporation',
-      'Public Works Department',
-      'Water Supply Department',
+      'Road Department',
+      'Sewage Department',
+      'Waste Department',
+      'Water Department',
       'Electric Department'
     ],
     default: 'Municipal Corporation',
@@ -36,6 +38,10 @@ const GrievanceSchema = new mongoose.Schema({
   confidence: {
     type: Number,
     default: 0,
+  },
+  resolutionImage: {
+    type: String,
+    default: null,
   },
   createdAt: {
     type: Date,

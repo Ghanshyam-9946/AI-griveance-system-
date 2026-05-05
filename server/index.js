@@ -45,9 +45,20 @@ app.post('/api/complaints', async (req, res) => {
 
     // 2. Map Category to Department
     let department = 'Municipal Corporation';
-    if (category === 'Road Issues') department = 'Public Works Department';
-    else if (category === 'Electricity') department = 'Electric Department';
-    else if (category === 'Water Supply') department = 'Water Supply Department';
+    const cat = category.toLowerCase();
+    const textLower = text.toLowerCase();
+    
+    if (cat.includes('road') || textLower.includes('road') || textLower.includes('sadak')) {
+      department = 'Road Department';
+    } else if (cat.includes('sewage') || cat.includes('sanitation') || textLower.includes('sewage') || textLower.includes('gutter')) {
+      department = 'Sewage Department';
+    } else if (cat.includes('waste') || cat.includes('garbage') || textLower.includes('kachra') || textLower.includes('waste')) {
+      department = 'Waste Department';
+    } else if (cat.includes('water') || textLower.includes('water') || textLower.includes('pani') || textLower.includes('paani')) {
+      department = 'Water Department';
+    } else if (cat.includes('electric') || cat.includes('light') || textLower.includes('light') || textLower.includes('bijli')) {
+      department = 'Electric Department';
+    }
 
     // 3. Save to Database
     const newGrievance = new Grievance({
@@ -77,13 +88,27 @@ app.get('/api/complaints', async (req, res) => {
   }
 });
 
+// 2.5 Get a specific complaint by ID
+app.get('/api/complaints/:id', async (req, res) => {
+  try {
+    const complaint = await Grievance.findById(req.params.id);
+    if (!complaint) return res.status(404).json({ error: 'Complaint not found' });
+    res.json(complaint);
+  } catch (err) {
+    res.status(500).json({ error: 'Server Error' });
+  }
+});
+
 // 3. Update status
 app.patch('/api/complaints/:id', async (req, res) => {
-  const { status } = req.body;
+  const { status, resolutionImage } = req.body;
   try {
+    const updateData = { status };
+    if (resolutionImage) updateData.resolutionImage = resolutionImage;
+
     const updated = await Grievance.findByIdAndUpdate(
       req.params.id,
-      { status },
+      updateData,
       { new: true }
     );
     res.json(updated);

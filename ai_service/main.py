@@ -22,10 +22,10 @@ class GrievanceResponse(BaseModel):
 # Predefined categories for the city grievance system
 CATEGORIES = [
     "Road Issues",
-    "Sanitation",
-    "Electricity",
+    "Sewage Issues",
+    "Waste & Garbage",
     "Water Supply",
-    "Public Safety",
+    "Electricity & Lights",
     "Others"
 ]
 
