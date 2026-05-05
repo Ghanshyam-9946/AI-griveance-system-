@@ -33,9 +33,21 @@ const GrievanceSchema = new mongoose.Schema({
     type: String,
     default: 'Unknown',
   },
+  lat: {
+    type: Number,
+  },
+  lon: {
+    type: Number,
+  },
   confidence: {
     type: Number,
     default: 0,
+  },
+  imageUrl: {
+    type: String,
+  },
+  imageDescription: {
+    type: String,
   },
   createdAt: {
     type: Date,
