@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title } from 'chart.js';
 import { Pie, Bar } from 'react-chartjs-2';
-import { Clock, CheckCircle2, AlertCircle, Filter, RefreshCw } from 'lucide-react';
+import { Clock, CheckCircle2, AlertCircle, Filter, RefreshCw, MapPin, ShieldAlert, AlertTriangle } from 'lucide-react';
 
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title);
 
@@ -16,7 +16,10 @@ const Dashboard = () => {
   // Modals for photo upload
   const [resolutionModal, setResolutionModal] = useState({ open: false, complaintId: null });
   const [photoPreview, setPhotoPreview] = useState(null);
-  const [viewProofModal, setViewProofModal] = useState({ open: false, image: null });
+  const [viewImageModal, setViewImageModal] = useState({ open: false, image: null, title: '', isAi: false, aiConfidence: 0 });
+
+  // AI Detection state
+  const [aiDetection, setAiDetection] = useState({ checked: false, loading: false, isAi: false, confidence: 0 });
 
   const fetchData = async () => {
     setLoading(true);
@@ -58,11 +61,13 @@ const Dashboard = () => {
     }
   };
 
-  const handlePhotoCapture = (e) => {
+  const handlePhotoCapture = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    // Very basic compression for prototype using canvas
+    setAiDetection({ checked: false, loading: true, isAi: false, confidence: 0 });
+
+    // Preview logic
     const reader = new FileReader();
     reader.onloadend = () => {
       const img = new Image();
@@ -79,6 +84,19 @@ const Dashboard = () => {
       img.src = reader.result;
     };
     reader.readAsDataURL(file);
+
+    // Send to AI detection proxy
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+      const res = await axios.post('http://127.0.0.1:5000/api/detect-ai-image', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      setAiDetection({ checked: true, loading: false, isAi: res.data.is_ai_generated, confidence: res.data.confidence });
+    } catch (err) {
+      console.error("AI detection failed", err);
+      setAiDetection({ checked: true, loading: false, isAi: false, confidence: 0 });
+    }
   };
 
   const submitResolution = async () => {
@@ -86,9 +104,23 @@ const Dashboard = () => {
       alert("Please capture or upload a photo first.");
       return;
     }
-    await updateStatus(resolutionModal.complaintId, 'Resolved', photoPreview);
+    
+    try {
+      const payload = { 
+        status: 'Resolved', 
+        resolutionImage: photoPreview,
+        isAiGenerated: aiDetection.isAi,
+        aiDetectionConfidence: aiDetection.confidence
+      };
+      await axios.patch(`http://127.0.0.1:5000/api/complaints/${resolutionModal.complaintId}`, payload);
+      fetchData();
+    } catch (error) {
+      console.error("Update failed", error);
+    }
+    
     setResolutionModal({ open: false, complaintId: null });
     setPhotoPreview(null);
+    setAiDetection({ checked: false, loading: false, isAi: false, confidence: 0 });
   };
 
   if (loading && !stats) return <div style={{ textAlign: 'center', padding: '5rem' }}>Loading Dashboard...</div>;
@@ -111,7 +143,7 @@ const Dashboard = () => {
     'Electric Department'
   ];
 
-  const filteredComplaints = activeRole === 'Municipal Corporation' 
+  const filteredComplaints = activeRole === 'Municipal Corporation'
     ? (filterDepartment === 'All' ? complaints : complaints.filter(c => c.department === filterDepartment))
     : complaints.filter(c => c.department === activeRole);
 
@@ -144,8 +176,8 @@ const Dashboard = () => {
         </div>
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
           {activeRole === 'Municipal Corporation' && (
-            <select 
-              value={filterDepartment} 
+            <select
+              value={filterDepartment}
               onChange={(e) => setFilterDepartment(e.target.value)}
               className="glass"
               style={{ padding: '0.5rem 1rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'rgba(255,255,255,0.05)', color: 'white', outline: 'none' }}
@@ -215,12 +247,20 @@ const Dashboard = () => {
                   <td style={{ padding: '1rem', maxWidth: '300px' }}>
                     <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                       {c.imageUrl && (
-                        <div style={{ width: '50px', height: '50px', borderRadius: '8px', overflow: 'hidden', flexShrink: 0, border: '1px solid var(--border)' }}>
-                          <img 
-                            src={`http://127.0.0.1:5000${c.imageUrl}`} 
-                            alt="Grievance" 
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                        <div
+                          onClick={() => setViewImageModal({ open: true, image: `http://127.0.0.1:5000${c.imageUrl}`, title: 'Request Problem Image' })}
+                          style={{ width: '50px', height: '50px', borderRadius: '8px', overflow: 'hidden', flexShrink: 0, border: '1px solid var(--border)', cursor: 'pointer', position: 'relative' }}
+                        >
+                          <img
+                            src={`http://127.0.0.1:5000${c.imageUrl}`}
+                            alt="Grievance"
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                           />
+                          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0, transition: 'opacity 0.2s' }}
+                            onMouseEnter={(e) => e.currentTarget.style.opacity = 1}
+                            onMouseLeave={(e) => e.currentTarget.style.opacity = 0}>
+                            <span style={{ color: 'white', fontSize: '0.7rem', fontWeight: 'bold' }}>View</span>
+                          </div>
                         </div>
                       )}
                       <div style={{ overflow: 'hidden' }}>
@@ -228,9 +268,9 @@ const Dashboard = () => {
                         <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
                           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.location}</span>
                           {c.lat && c.lon && (
-                            <a 
-                              href={`https://www.google.com/maps?q=${c.lat},${c.lon}`} 
-                              target="_blank" 
+                            <a
+                              href={`https://www.google.com/maps?q=${c.lat},${c.lon}`}
+                              target="_blank"
                               rel="noreferrer"
                               style={{ color: 'var(--primary)', display: 'flex', alignItems: 'center' }}
                               title="View exact location on Google Maps"
@@ -248,7 +288,7 @@ const Dashboard = () => {
                     </span>
                   </td>
                   <td style={{ padding: '1rem' }}>
-                    <span style={{ 
+                    <span style={{
                       color: c.priority === 'High' ? 'var(--danger)' : c.priority === 'Medium' ? 'var(--warning)' : 'var(--success)',
                       fontWeight: 700
                     }}>
@@ -263,15 +303,15 @@ const Dashboard = () => {
                   <td style={{ padding: '1rem' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                       {activeRole === 'Municipal Corporation' ? (
-                        <span style={{ 
+                        <span style={{
                           fontWeight: 600,
                           color: c.status === 'Resolved' ? 'var(--success)' : c.status === 'In Progress' ? 'var(--primary)' : 'var(--warning)'
                         }}>
                           {c.status}
                         </span>
                       ) : (
-                        <select 
-                          value={c.status} 
+                        <select
+                          value={c.status}
                           onChange={(e) => handleStatusChange(e, c._id)}
                           style={{ background: 'rgba(255,255,255,0.05)', color: 'white', border: '1px solid var(--border)', borderRadius: '4px', padding: '0.3rem' }}
                         >
@@ -280,15 +320,23 @@ const Dashboard = () => {
                           <option value="Resolved">Resolved</option>
                         </select>
                       )}
-                      
+
                       {c.resolutionImage && (
-                        <button 
-                          className="glass" 
-                          style={{ fontSize: '0.8rem', padding: '0.3rem', width: 'fit-content' }}
-                          onClick={() => setViewProofModal({ open: true, image: c.resolutionImage })}
-                        >
-                          View Proof
-                        </button>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                          <button
+                            className="glass"
+                            style={{ fontSize: '0.8rem', padding: '0.3rem', width: 'fit-content' }}
+                            onClick={() => setViewImageModal({ open: true, image: c.resolutionImage, title: 'Resolution Proof', isAi: c.isAiGenerated, aiConfidence: c.aiDetectionConfidence })}
+                          >
+                            View Proof
+                          </button>
+                          {c.isAiGenerated && (
+                            <div style={{ marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.3rem', color: 'var(--danger)', fontSize: '0.75rem', fontWeight: 700 }}>
+                              <ShieldAlert size={14} />
+                              <span>AI Generated Image</span>
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
                   </td>
@@ -306,7 +354,7 @@ const Dashboard = () => {
               <Pie data={pieData} options={{ maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8' } } } }} />
             </div>
           </div>
-          
+
           <div className="glass" style={{ padding: '1.5rem', textAlign: 'center' }}>
             <AlertCircle size={32} style={{ color: 'var(--primary)', marginBottom: '1rem' }} />
             <h4>AI Insight</h4>
@@ -320,12 +368,47 @@ const Dashboard = () => {
       {/* Resolution Photo Modal */}
       {resolutionModal.open && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-          <div className="glass" style={{ padding: '2rem', maxWidth: '400px', width: '90%', textAlign: 'center' }}>
+          <div className="glass" style={{ padding: '2rem', maxWidth: '450px', width: '90%', textAlign: 'center' }}>
             <h3>Upload Live Photo</h3>
             <p style={{ color: 'var(--text-muted)' }}>You must provide photographic proof to resolve this issue.</p>
-            
+
             {photoPreview ? (
-              <img src={photoPreview} alt="Proof preview" style={{ width: '100%', maxHeight: '300px', objectFit: 'cover', borderRadius: '8px', margin: '1rem 0' }} />
+              <div style={{ margin: '1rem 0' }}>
+                <img src={photoPreview} alt="Proof preview" style={{ width: '100%', maxHeight: '250px', objectFit: 'cover', borderRadius: '8px' }} />
+                
+                {aiDetection.loading && (
+                  <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', color: 'var(--primary)' }}>
+                    <RefreshCw size={18} style={{ animation: 'spin 1s linear infinite' }} />
+                    <span>Analyzing image for AI generation...</span>
+                  </div>
+                )}
+
+                {aiDetection.checked && aiDetection.isAi && (
+                  <div style={{ marginTop: '1rem', padding: '1rem', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '12px', border: '1px solid var(--danger)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', color: 'var(--danger)', marginBottom: '0.5rem' }}>
+                      <AlertTriangle size={24} />
+                      <h4 style={{ margin: 0 }}>AI Generated Image Detected!</h4>
+                    </div>
+                    <p style={{ color: 'var(--danger)', fontSize: '1rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      ⚠️ WARNING: Tum AI generated image upload kar rhe ho, is se tumhari job ja sakti hai! 🚨
+                    </p>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.5rem' }}>
+                      Our system detected this image is {aiDetection.confidence}% likely to be AI-generated.
+                    </p>
+                    <label className="btn-primary" style={{ cursor: 'pointer', padding: '0.5rem 1rem', display: 'inline-block', marginTop: '0.5rem', fontSize: '0.8rem' }}>
+                      Re-upload Real Photo
+                      <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={handlePhotoCapture} />
+                    </label>
+                  </div>
+                )}
+
+                {aiDetection.checked && !aiDetection.isAi && (
+                  <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', color: 'var(--success)' }}>
+                    <CheckCircle2 size={18} />
+                    <span>Authentic image verified by AI.</span>
+                  </div>
+                )}
+              </div>
             ) : (
               <div style={{ margin: '2rem 0' }}>
                 <label className="btn-primary" style={{ cursor: 'pointer', padding: '1rem', display: 'inline-block' }}>
@@ -336,20 +419,28 @@ const Dashboard = () => {
             )}
 
             <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', marginTop: '1rem' }}>
-              <button className="glass" onClick={() => { setResolutionModal({ open: false, complaintId: null }); setPhotoPreview(null); }}>Cancel</button>
-              <button className="btn-primary" onClick={submitResolution} disabled={!photoPreview}>Submit & Resolve</button>
+              <button className="glass" onClick={() => { setResolutionModal({ open: false, complaintId: null }); setPhotoPreview(null); setAiDetection({ checked: false, loading: false, isAi: false, confidence: 0 }); }}>Cancel</button>
+              <button className="btn-primary" onClick={submitResolution} disabled={!photoPreview || aiDetection.loading}>Submit & Resolve</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* View Proof Modal */}
-      {viewProofModal.open && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }} onClick={() => setViewProofModal({ open: false, image: null })}>
+      {/* View Image Modal */}
+      {viewImageModal.open && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }} onClick={() => setViewImageModal({ open: false, image: null, title: '', isAi: false, aiConfidence: 0 })}>
           <div className="glass" style={{ padding: '1rem', maxWidth: '600px', width: '90%', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
-            <h3>Resolution Proof</h3>
-            <img src={viewProofModal.image} alt="Resolution Proof" style={{ width: '100%', borderRadius: '8px', marginTop: '1rem' }} />
-            <button className="btn-primary" style={{ marginTop: '1rem', width: '100%' }} onClick={() => setViewProofModal({ open: false, image: null })}>Close</button>
+            <h3>{viewImageModal.title}</h3>
+            <div style={{ position: 'relative' }}>
+              <img src={viewImageModal.image} alt={viewImageModal.title} style={{ width: '100%', borderRadius: '8px', marginTop: '1rem', maxHeight: '70vh', objectFit: 'contain' }} />
+              {viewImageModal.isAi && (
+                <div style={{ marginTop: '1rem', padding: '0.8rem', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '8px', border: '1px solid var(--danger)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', color: 'var(--danger)' }}>
+                  <ShieldAlert size={20} />
+                  <span style={{ fontWeight: 700 }}>AI Generated Image ({viewImageModal.aiConfidence}%)</span>
+                </div>
+              )}
+            </div>
+            <button className="btn-primary" style={{ marginTop: '1rem', width: '100%' }} onClick={() => setViewImageModal({ open: false, image: null, title: '', isAi: false, aiConfidence: 0 })}>Close</button>
           </div>
         </div>
       )}

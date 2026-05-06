@@ -14,6 +14,16 @@ const GrievanceForm = () => {
   const [analyzingImage, setAnalyzingImage] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
+  const [selectedDept, setSelectedDept] = useState('Municipal Corporation');
+
+  const DEPARTMENTS = [
+    'Municipal Corporation',
+    'Road Department',
+    'Sewage Department',
+    'Waste Department',
+    'Water Department',
+    'Electric Department'
+  ];
 
   const handleLocationSelect = (data) => {
     setLocation(data.address);
@@ -47,6 +57,18 @@ const GrievanceForm = () => {
         if (response.data.description) {
             setText(response.data.description);
         }
+        
+        // Map category to department
+        if (response.data.category) {
+            const cat = response.data.category.toLowerCase();
+            let dept = 'Municipal Corporation';
+            if (cat.includes('road')) dept = 'Road Department';
+            else if (cat.includes('sewage') || cat.includes('sanitation')) dept = 'Sewage Department';
+            else if (cat.includes('waste') || cat.includes('garbage')) dept = 'Waste Department';
+            else if (cat.includes('water')) dept = 'Water Department';
+            else if (cat.includes('electric') || cat.includes('light')) dept = 'Electric Department';
+            setSelectedDept(dept);
+        }
       } catch (err) {
         console.error("AI Analysis failed in frontend", err);
       } finally {
@@ -59,6 +81,7 @@ const GrievanceForm = () => {
     setImage(null);
     setImagePreview(null);
     setAnalyzingImage(false);
+    setSelectedDept('Municipal Corporation');
   };
 
   const handleSubmit = async (e) => {
@@ -72,6 +95,7 @@ const GrievanceForm = () => {
       formData.append('location', location || 'Location not provided');
       if (coords.lat) formData.append('lat', coords.lat);
       if (coords.lon) formData.append('lon', coords.lon);
+      formData.append('department', selectedDept);
       if (image) formData.append('image', image);
 
       const response = await axios.post('http://127.0.0.1:5000/api/complaints', formData, {
@@ -166,6 +190,23 @@ const GrievanceForm = () => {
                         </div>
                     )}
                 </div>
+            </div>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Assign to Department</label>
+              <select 
+                className="input-field" 
+                value={selectedDept} 
+                onChange={(e) => setSelectedDept(e.target.value)}
+                style={{ appearance: 'auto' }}
+              >
+                {DEPARTMENTS.map(dept => (
+                  <option key={dept} value={dept}>{dept}</option>
+                ))}
+              </select>
+              <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                You can manually select the department or let our AI auto-suggest it when you upload an image.
+              </p>
             </div>
 
             <div style={{ marginBottom: '2rem' }}>

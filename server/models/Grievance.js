@@ -45,6 +45,26 @@ const GrievanceSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+  imageUrl: {
+    type: String,
+    default: null,
+  },
+  imageDescription: {
+    type: String,
+    default: null,
+  },
+  resolutionImage: {
+    type: String,
+    default: null,
+  },
+  isAiGenerated: {
+    type: Boolean,
+    default: false,
+  },
+  aiDetectionConfidence: {
+    type: Number,
+    default: 0,
+  },
   createdAt: {
     type: Date,
     default: Date.now,

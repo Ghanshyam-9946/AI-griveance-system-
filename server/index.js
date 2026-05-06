@@ -39,7 +39,7 @@ mongoose.connect(MONGODB_URI)
 
 // 1. Submit a complaint (Supports Text + Image)
 app.post('/api/complaints', upload.single('image'), async (req, res) => {
-  const { text, location, lat, lon } = req.body;
+  const { text, location, lat, lon, department: userSelectedDepartment } = req.body;
   const imageFile = req.file;
 
   if (!text && !imageFile) {
@@ -51,54 +51,58 @@ app.post('/api/complaints', upload.single('image'), async (req, res) => {
     let imageUrl = imageFile ? `/uploads/${imageFile.filename}` : null;
 
     if (imageFile) {
-        // Analyze image if provided
-        console.log("Image received, sending to AI service for analysis...");
-        const formData = new FormData();
-        formData.append('file', fs.createReadStream(imageFile.path));
+      // Analyze image if provided
+      console.log("Image received, sending to AI service for analysis...");
+      const formData = new FormData();
+      formData.append('file', fs.createReadStream(imageFile.path));
 
-        try {
-            const aiResponse = await axios.post(`${AI_SERVICE_URL}/analyze-image`, formData, {
-                headers: formData.getHeaders()
-            });
-            ({ category, priority, confidence, description: imageDescription } = aiResponse.data);
-            console.log(`AI Analysis: ${category} (${priority}) - ${imageDescription}`);
-        } catch (aiErr) {
-            console.error("AI Service Image Analysis Error:", aiErr.message);
-            // Fallback
-            category = 'Others';
-            priority = 'Low';
-            confidence = 0;
-            imageDescription = "Image analysis failed";
-        }
+      try {
+        const aiResponse = await axios.post(`${AI_SERVICE_URL}/analyze-image`, formData, {
+          headers: formData.getHeaders()
+        });
+        ({ category, priority, confidence, description: imageDescription } = aiResponse.data);
+        console.log(`AI Analysis: ${category} (${priority}) - ${imageDescription}`);
+      } catch (aiErr) {
+        console.error("AI Service Image Analysis Error:", aiErr.message);
+        // Fallback
+        category = 'Others';
+        priority = 'Low';
+        confidence = 0;
+        imageDescription = "Image analysis failed";
+      }
     } else {
-        // Analyze text only
-        console.log(`Sending text to AI service: "${text}"`);
-        try {
-            const aiResponse = await axios.post(`${AI_SERVICE_URL}/classify`, { text });
-            ({ category, priority, confidence } = aiResponse.data);
-        } catch (aiErr) {
-            console.error("AI Service Text Error:", aiErr.message);
-            category = 'Others';
-            priority = 'Low';
-            confidence = 0;
-        }
+      // Analyze text only
+      console.log(`Sending text to AI service: "${text}"`);
+      try {
+        const aiResponse = await axios.post(`${AI_SERVICE_URL}/classify`, { text });
+        ({ category, priority, confidence } = aiResponse.data);
+      } catch (aiErr) {
+        console.error("AI Service Text Error:", aiErr.message);
+        category = 'Others';
+        priority = 'Low';
+        confidence = 0;
+      }
     }
 
-    // 2. Map Category to Department
-    let department = 'Municipal Corporation';
-    const cat = category.toLowerCase();
-    const textLower = text.toLowerCase();
-    
-    if (cat.includes('road') || textLower.includes('road') || textLower.includes('sadak')) {
-      department = 'Road Department';
-    } else if (cat.includes('sewage') || cat.includes('sanitation') || textLower.includes('sewage') || textLower.includes('gutter')) {
-      department = 'Sewage Department';
-    } else if (cat.includes('waste') || cat.includes('garbage') || textLower.includes('kachra') || textLower.includes('waste')) {
-      department = 'Waste Department';
-    } else if (cat.includes('water') || textLower.includes('water') || textLower.includes('pani') || textLower.includes('paani')) {
-      department = 'Water Department';
-    } else if (cat.includes('electric') || cat.includes('light') || textLower.includes('light') || textLower.includes('bijli')) {
-      department = 'Electric Department';
+    // 2. Map Category to Department (only if not provided by user)
+    let finalDepartment = userSelectedDepartment || 'Municipal Corporation';
+
+    // If frontend didn't send a department, fallback to AI logic
+    if (!userSelectedDepartment || userSelectedDepartment === 'Municipal Corporation') {
+      const cat = category.toLowerCase();
+      const textLower = text.toLowerCase();
+
+      if (cat.includes('road') || textLower.includes('road') || textLower.includes('sadak')) {
+        finalDepartment = 'Road Department';
+      } else if (cat.includes('sewage') || cat.includes('sanitation') || textLower.includes('sewage') || textLower.includes('gutter')) {
+        finalDepartment = 'Sewage Department';
+      } else if (cat.includes('waste') || cat.includes('garbage') || textLower.includes('kachra') || textLower.includes('waste')) {
+        finalDepartment = 'Waste Department';
+      } else if (cat.includes('water') || textLower.includes('water') || textLower.includes('pani') || textLower.includes('paani')) {
+        finalDepartment = 'Water Department';
+      } else if (cat.includes('electric') || cat.includes('light') || textLower.includes('light') || textLower.includes('bijli')) {
+        finalDepartment = 'Electric Department';
+      }
     }
 
     // 3. Save to Database
@@ -110,7 +114,7 @@ app.post('/api/complaints', upload.single('image'), async (req, res) => {
       category,
       priority,
       confidence,
-      department,
+      department: finalDepartment,
       imageUrl,
       imageDescription
     });
@@ -146,10 +150,12 @@ app.get('/api/complaints/:id', async (req, res) => {
 
 // 3. Update status
 app.patch('/api/complaints/:id', async (req, res) => {
-  const { status, resolutionImage } = req.body;
+  const { status, resolutionImage, isAiGenerated, aiDetectionConfidence } = req.body;
   try {
     const updateData = { status };
     if (resolutionImage) updateData.resolutionImage = resolutionImage;
+    if (typeof isAiGenerated === 'boolean') updateData.isAiGenerated = isAiGenerated;
+    if (typeof aiDetectionConfidence === 'number') updateData.aiDetectionConfidence = aiDetectionConfidence;
 
     const updated = await Grievance.findByIdAndUpdate(
       req.params.id,
@@ -164,40 +170,63 @@ app.patch('/api/complaints/:id', async (req, res) => {
 
 // 4. Get Statistics (for Dashboard)
 app.get('/api/stats', async (req, res) => {
-    try {
-        const stats = await Grievance.aggregate([
-            { $group: { _id: "$category", count: { $sum: 1 } } }
-        ]);
-        const statusStats = await Grievance.aggregate([
-            { $group: { _id: "$status", count: { $sum: 1 } } }
-        ]);
-        res.json({ categories: stats, statuses: statusStats });
-    } catch (err) {
-        res.status(500).json({ error: 'Server Error' });
-    }
+  try {
+    const stats = await Grievance.aggregate([
+      { $group: { _id: "$category", count: { $sum: 1 } } }
+    ]);
+    const statusStats = await Grievance.aggregate([
+      { $group: { _id: "$status", count: { $sum: 1 } } }
+    ]);
+    res.json({ categories: stats, statuses: statusStats });
+  } catch (err) {
+    res.status(500).json({ error: 'Server Error' });
+  }
 });
 
 // 5. Analyze image only (for immediate feedback)
 app.post('/api/analyze-image', upload.single('image'), async (req, res) => {
-    const imageFile = req.file;
-    if (!imageFile) return res.status(400).json({ error: 'Image is required' });
+  const imageFile = req.file;
+  if (!imageFile) return res.status(400).json({ error: 'Image is required' });
 
-    try {
-        const formData = new FormData();
-        formData.append('file', fs.createReadStream(imageFile.path));
+  try {
+    const formData = new FormData();
+    formData.append('file', fs.createReadStream(imageFile.path));
 
-        const aiResponse = await axios.post(`${AI_SERVICE_URL}/analyze-image`, formData, {
-            headers: formData.getHeaders()
-        });
-        
-        // Clean up temp file
-        // fs.unlinkSync(imageFile.path); 
-        
-        res.json(aiResponse.data);
-    } catch (err) {
-        console.error("AI Analysis failed", err.message);
-        res.status(500).json({ error: 'AI analysis failed' });
-    }
+    const aiResponse = await axios.post(`${AI_SERVICE_URL}/analyze-image`, formData, {
+      headers: formData.getHeaders()
+    });
+
+    // Clean up temp file
+    // fs.unlinkSync(imageFile.path); 
+
+    res.json(aiResponse.data);
+  } catch (err) {
+    console.error("AI Analysis failed", err.message);
+    res.status(500).json({ error: 'AI analysis failed' });
+  }
+});
+
+// 6. Detect AI-generated image
+app.post('/api/detect-ai-image', upload.single('image'), async (req, res) => {
+  const imageFile = req.file;
+  if (!imageFile) return res.status(400).json({ error: 'Image is required' });
+
+  try {
+    const formData = new FormData();
+    formData.append('file', fs.createReadStream(imageFile.path));
+
+    const aiResponse = await axios.post(`${AI_SERVICE_URL}/detect-ai-image`, formData, {
+      headers: formData.getHeaders()
+    });
+
+    // Clean up temp file
+    fs.unlinkSync(imageFile.path);
+
+    res.json(aiResponse.data);
+  } catch (err) {
+    console.error("AI Detection failed", err.message);
+    res.status(500).json({ error: 'AI detection failed', is_ai_generated: false, confidence: 0 });
+  }
 });
 
 app.listen(PORT, () => {
