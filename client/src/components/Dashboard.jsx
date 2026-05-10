@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title } from 'chart.js';
 import { Pie, Bar } from 'react-chartjs-2';
-import { Clock, CheckCircle2, AlertCircle, Filter, RefreshCw, MapPin, ShieldAlert, AlertTriangle, LayoutDashboard } from 'lucide-react';
+import { Clock, CheckCircle2, AlertCircle, Filter, RefreshCw, MapPin, ShieldAlert, AlertTriangle, LayoutDashboard, PlusCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title);
@@ -13,11 +13,12 @@ const Dashboard = () => {
   const [filterDepartment, setFilterDepartment] = useState('All');
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [deptTokens, setDeptTokens] = useState([]);
 
   // Modals for photo upload
   const [resolutionModal, setResolutionModal] = useState({ open: false, complaintId: null });
   const [photoPreview, setPhotoPreview] = useState(null);
-  const [viewImageModal, setViewImageModal] = useState({ open: false, image: null, title: '', isAi: false, aiConfidence: 0 });
+  const [viewImageModal, setViewImageModal] = useState({ open: false, image: null, originalImage: null, title: '', isAi: false, aiConfidence: 0 });
 
   // AI Detection & Comparison state
   const [aiDetection, setAiDetection] = useState({ checked: false, loading: false, isAi: false, confidence: 0 });
@@ -26,12 +27,14 @@ const Dashboard = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [resComplaints, resStats] = await Promise.all([
+      const [resComplaints, resStats, resTokens] = await Promise.all([
         axios.get('http://127.0.0.1:5000/api/complaints'),
-        axios.get('http://127.0.0.1:5000/api/stats')
+        axios.get('http://127.0.0.1:5000/api/stats'),
+        axios.get('http://127.0.0.1:5000/api/departments/tokens')
       ]);
       setComplaints(resComplaints.data);
       setStats(resStats.data);
+      setDeptTokens(resTokens.data);
     } catch (error) {
       console.error("Error fetching dashboard data", error);
     } finally {
@@ -128,15 +131,17 @@ const Dashboard = () => {
         isMatch: similarity.isMatch
       };
       await axios.patch(`http://127.0.0.1:5000/api/complaints/${resolutionModal.complaintId}`, payload);
-      fetchData();
+      await fetchData();
+      
+      // Reset state ONLY on success
+      setResolutionModal({ open: false, complaintId: null });
+      setPhotoPreview(null);
+      setAiDetection({ checked: false, loading: false, isAi: false, confidence: 0 });
+      setSimilarity({ checked: false, loading: false, score: 0, isMatch: true });
     } catch (error) {
       console.error("Update failed", error);
+      alert("Failed to resolve grievance. Please try again. " + (error.response?.data?.error || error.message));
     }
-    
-    setResolutionModal({ open: false, complaintId: null });
-    setPhotoPreview(null);
-    setAiDetection({ checked: false, loading: false, isAi: false, confidence: 0 });
-    setSimilarity({ checked: false, loading: false, score: 0, isMatch: true });
   };
 
   if (loading && !stats) return <div style={{ textAlign: 'center', padding: '5rem' }}>Loading Dashboard...</div>;
@@ -190,7 +195,29 @@ const Dashboard = () => {
           <h2 style={{ margin: 0 }}>{activeRole} Dashboard</h2>
           <p style={{ color: 'var(--text-muted)', margin: 0 }}>Managing {filteredComplaints.length} grievances</p>
         </div>
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
+          {activeRole !== 'Municipal Corporation' && (
+            <div className="glass" style={{ 
+              padding: '0.6rem 1.2rem', 
+              borderRadius: '10px', 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '0.6rem',
+              background: 'rgba(234, 179, 8, 0.1)',
+              border: '1px solid rgba(234, 179, 8, 0.2)'
+            }}>
+               <div style={{ background: '#eab308', padding: '0.3rem', borderRadius: '50%', display: 'flex' }}>
+                <PlusCircle size={14} color="black" />
+              </div>
+              <div>
+                <p style={{ margin: 0, fontSize: '0.6rem', color: '#eab308', fontWeight: 'bold' }}>DEPT REWARDS</p>
+                <p style={{ margin: 0, fontSize: '1rem', fontWeight: 'bold', color: '#fef08a' }}>
+                  {deptTokens.find(d => d.name === activeRole)?.tokens || 0} Tokens
+                </p>
+              </div>
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
           {activeRole === 'Municipal Corporation' && (
             <select
               value={filterDepartment}
@@ -209,6 +236,7 @@ const Dashboard = () => {
           </button>
         </div>
       </div>
+    </div>
       {/* Stats Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
         <div className="glass" style={{ padding: '1.5rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -340,9 +368,16 @@ const Dashboard = () => {
                       {c.resolutionImage && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                           <button
-                            className="glass"
-                            style={{ fontSize: '0.8rem', padding: '0.3rem', width: 'fit-content' }}
-                            onClick={() => setViewImageModal({ open: true, image: c.resolutionImage, title: 'Resolution Proof', isAi: c.isAiGenerated, aiConfidence: c.aiDetectionConfidence })}
+                            className="btn-primary"
+                            style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem', width: 'fit-content' }}
+                            onClick={() => setViewImageModal({ 
+                              open: true, 
+                              image: c.resolutionImage, 
+                              originalImage: c.imageUrl ? `http://127.0.0.1:5000${c.imageUrl}` : null,
+                              title: 'Resolution Proof - Before & After', 
+                              isAi: c.isAiGenerated, 
+                              aiConfidence: c.aiDetectionConfidence 
+                            })}
                           >
                             View Proof
                           </button>
@@ -490,21 +525,47 @@ const Dashboard = () => {
         </div>
       )}
 
-      {/* View Image Modal */}
       {viewImageModal.open && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }} onClick={() => setViewImageModal({ open: false, image: null, title: '', isAi: false, aiConfidence: 0 })}>
-          <div className="glass" style={{ padding: '1rem', maxWidth: '600px', width: '90%', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
-            <h3>{viewImageModal.title}</h3>
-            <div style={{ position: 'relative' }}>
-              <img src={viewImageModal.image} alt={viewImageModal.title} style={{ width: '100%', borderRadius: '8px', marginTop: '1rem', maxHeight: '70vh', objectFit: 'contain' }} />
-              {viewImageModal.isAi && (
-                <div style={{ marginTop: '1rem', padding: '0.8rem', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '8px', border: '1px solid var(--danger)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', color: 'var(--danger)' }}>
-                  <ShieldAlert size={20} />
-                  <span style={{ fontWeight: 700 }}>AI Generated Image ({viewImageModal.aiConfidence}%)</span>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000, padding: '1rem' }} onClick={() => setViewImageModal({ open: false, image: null, originalImage: null, title: '', isAi: false, aiConfidence: 0 })}>
+          <div className="glass" style={{ padding: '1.5rem', maxWidth: viewImageModal.originalImage ? '1000px' : '600px', width: '95%', textAlign: 'center', position: 'relative' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h3 style={{ margin: 0 }}>{viewImageModal.title}</h3>
+              <button onClick={() => setViewImageModal({ open: false, image: null, originalImage: null, title: '', isAi: false, aiConfidence: 0 })} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '1.5rem' }}>&times;</button>
+            </div>
+            
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: viewImageModal.originalImage ? '1fr 1fr' : '1fr', 
+              gap: '1.5rem',
+              maxHeight: '70vh',
+              overflowY: 'auto',
+              padding: '0.5rem'
+            }}>
+              {viewImageModal.originalImage && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <div style={{ background: 'rgba(255,255,255,0.05)', padding: '0.5rem', borderRadius: '8px', fontWeight: 600, color: 'var(--warning)' }}>
+                    BEFORE (Complaint)
+                  </div>
+                  <img src={viewImageModal.originalImage} alt="Original Complaint" style={{ width: '100%', borderRadius: '12px', border: '1px solid var(--border)', objectFit: 'contain' }} />
                 </div>
               )}
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                <div style={{ background: 'rgba(255,255,255,0.05)', padding: '0.5rem', borderRadius: '8px', fontWeight: 600, color: 'var(--success)' }}>
+                  {viewImageModal.originalImage ? 'AFTER (Resolution)' : 'Image Preview'}
+                </div>
+                <img src={viewImageModal.image} alt="Resolution Proof" style={{ width: '100%', borderRadius: '12px', border: '1px solid var(--border)', objectFit: 'contain' }} />
+              </div>
             </div>
-            <button className="btn-primary" style={{ marginTop: '1rem', width: '100%' }} onClick={() => setViewImageModal({ open: false, image: null, title: '', isAi: false, aiConfidence: 0 })}>Close</button>
+
+            {viewImageModal.isAi && (
+              <div style={{ marginTop: '1.5rem', padding: '1rem', background: 'rgba(239, 68, 68, 0.15)', borderRadius: '12px', border: '2px solid var(--danger)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', color: 'var(--danger)' }}>
+                <ShieldAlert size={24} />
+                <span style={{ fontWeight: 800, fontSize: '1.1rem' }}>AI GENERATED IMAGE DETECTED ({viewImageModal.aiConfidence}%)</span>
+              </div>
+            )}
+            
+            <button className="btn-primary" style={{ marginTop: '1.5rem', width: '100%', padding: '1rem' }} onClick={() => setViewImageModal({ open: false, image: null, originalImage: null, title: '', isAi: false, aiConfidence: 0 })}>Close Preview</button>
           </div>
         </div>
       )}

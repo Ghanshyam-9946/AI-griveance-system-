@@ -50,9 +50,37 @@ async def classify_grievance(request: GrievanceRequest):
 async def analyze_image(file: UploadFile = File(...)):
     image_data = await file.read()
     image = Image.open(io.BytesIO(image_data)).convert("RGB")
-    inputs = blip_processor(image, return_tensors="pt")
-    output = blip_model.generate(**inputs, max_new_tokens=50)
+    
+    # Using a simpler prompt or no prompt to avoid triggering repetition loops
+    # BLIP sometimes loops when forced with specific prompts
+    prompt = "a photo of"
+    inputs = blip_processor(image, text=prompt, return_tensors="pt")
+    
+    # Robust generation parameters to prevent repetition
+    output = blip_model.generate(
+        **inputs, 
+        max_new_tokens=40,
+        min_length=10, 
+        num_beams=7, # More beams for better quality
+        no_repeat_ngram_size=3, # Strictly prevent 3-gram repetitions
+        repetition_penalty=1.8, # Stronger penalty for repeating words
+        early_stopping=True
+    )
+    
     caption = blip_processor.decode(output[0], skip_special_tokens=True)
+    
+    # Post-process: Remove the prompt and any lingering "moped" style loops
+    if caption.startswith(prompt):
+        caption = caption[len(prompt):].strip()
+    
+    # Final cleanup of common hallucinated repetitions
+    words = caption.split()
+    unique_words = []
+    for w in words:
+        if not unique_words or w != unique_words[-1]: # Simple adjacent word de-duplication
+            unique_words.append(w)
+    caption = " ".join(unique_words)
+        
     result = run_classification(caption)
     result["description"] = caption
     return result

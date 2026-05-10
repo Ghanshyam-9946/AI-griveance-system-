@@ -5,7 +5,7 @@ import { Send, CheckCircle, MapPin, AlertTriangle, Loader2, Camera, X } from 'lu
 
 import MapPicker from './MapPicker';
 
-const GrievanceForm = () => {
+const GrievanceForm = ({ userAadhar, onSuccess }) => {
   const [text, setText] = useState('');
   const [location, setLocation] = useState('');
   const [coords, setCoords] = useState({ lat: null, lon: null });
@@ -96,6 +96,7 @@ const GrievanceForm = () => {
       if (coords.lat) formData.append('lat', coords.lat);
       if (coords.lon) formData.append('lon', coords.lon);
       formData.append('department', selectedDept);
+      formData.append('userAadhar', userAadhar);
       if (image) formData.append('image', image);
 
       const response = await axios.post('http://127.0.0.1:5000/api/complaints', formData, {
@@ -280,9 +281,14 @@ const GrievanceForm = () => {
             </div>
           </div>
 
-          <button className="glass" onClick={() => setResult(null)} style={{ padding: '0.75rem 2rem' }}>
-            Report Another Issue
-          </button>
+          <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+            <button className="glass" onClick={() => setResult(null)} style={{ padding: '0.75rem 2rem' }}>
+              Report Another Issue
+            </button>
+            <button className="btn-primary" onClick={onSuccess} style={{ padding: '0.75rem 2rem' }}>
+              Go to Dashboard
+            </button>
+          </div>
         </motion.div>
       )}
     </div>

@@ -56,7 +56,7 @@ const AadharLogin = ({ onLogin }) => {
     try {
       const res = await axios.post(`${API_URL}/verify-otp`, { aadhar, otp });
       // On success, trigger login
-      onLogin(res.data.token);
+      onLogin(res.data.token, aadhar);
     } catch (err) {
       setError(err.response?.data?.error || 'Invalid OTP');
     } finally {

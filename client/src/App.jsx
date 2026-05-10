@@ -3,11 +3,19 @@ import GrievanceForm from './components/GrievanceForm';
 import Dashboard from './components/Dashboard';
 import TrackStatus from './components/TrackStatus';
 import AadharLogin from './components/AadharLogin';
-import { LayoutDashboard, Send, Search, LogOut } from 'lucide-react';
+import UserDashboard from './components/UserDashboard';
+import { LayoutDashboard, Send, Search, LogOut, PlusCircle } from 'lucide-react';
 
 function App() {
-  const [view, setView] = useState('citizen'); // 'citizen' or 'admin'
+  const [view, setView] = useState('citizen'); // 'citizen', 'track', 'admin', 'user-dashboard'
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [userAadhar, setUserAadhar] = useState(null);
+
+  const handleLogin = (token, aadhar) => {
+    setUserAadhar(aadhar);
+    setIsAuthenticated(true);
+    setView('user-dashboard'); // Go to dashboard after login
+  };
 
   if (!isAuthenticated) {
     return (
@@ -20,7 +28,7 @@ function App() {
             <h2 style={{ margin: 0, fontSize: '1.25rem' }} className="gradient-text">CivicAI</h2>
           </div>
         </nav>
-        <AadharLogin onLogin={(token) => setIsAuthenticated(true)} />
+        <AadharLogin onLogin={(token, aadhar) => handleLogin(token, aadhar)} />
       </div>
     );
   }
@@ -37,11 +45,11 @@ function App() {
         
         <div style={{ display: 'flex', gap: '1rem' }}>
           <button 
-            className={view === 'citizen' ? 'btn-primary' : 'glass'} 
-            onClick={() => setView('citizen')}
+            className={view === 'user-dashboard' ? 'btn-primary' : 'glass'} 
+            onClick={() => setView('user-dashboard')}
             style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem' }}
           >
-            <Send size={18} /> Report Issue
+            <LayoutDashboard size={18} /> Dashboard
           </button>
           <button 
             className={view === 'track' ? 'btn-primary' : 'glass'} 
@@ -74,7 +82,11 @@ function App() {
               <h1 style={{ fontSize: '3rem' }}>Report a <span className="gradient-text">Grievance</span></h1>
               <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>Our AI will automatically categorize and route your issue to the right department.</p>
             </header>
-            <GrievanceForm />
+            <GrievanceForm userAadhar={userAadhar} onSuccess={() => setView('user-dashboard')} />
+          </div>
+        ) : view === 'user-dashboard' ? (
+          <div className="animate-fade-in">
+             <UserDashboard userAadhar={userAadhar} onReportIssue={() => setView('citizen')} />
           </div>
         ) : view === 'track' ? (
           <div className="animate-fade-in">

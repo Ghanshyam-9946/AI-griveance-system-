@@ -111,6 +111,21 @@ const TrackStatus = () => {
               </div>
             </div>
           </div>
+
+          {result.status === 'Resolved' && result.resolutionImage && (
+            <div style={{ marginTop: '2rem', background: 'rgba(16, 185, 129, 0.05)', padding: '1.5rem', borderRadius: '12px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+              <p style={{ color: '#10b981', fontSize: '0.9rem', marginBottom: '1rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <CheckCircle2 size={18} /> RESOLUTION PROOF
+              </p>
+              <div style={{ width: '100%', borderRadius: '8px', overflow: 'hidden' }}>
+                <img 
+                  src={result.resolutionImage.startsWith('data:') ? result.resolutionImage : `http://127.0.0.1:5000${result.resolutionImage}`} 
+                  alt="Resolution" 
+                  style={{ width: '100%', height: 'auto', maxHeight: '400px', objectFit: 'cover' }}
+                />
+              </div>
+            </div>
+          )}
         </motion.div>
       )}
     </div>

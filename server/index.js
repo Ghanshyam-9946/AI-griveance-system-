@@ -11,13 +11,15 @@ const fs = require('fs');
 const FormData = require('form-data');
 
 const Grievance = require('./models/Grievance');
+const Department = require('./models/Department');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use('/uploads', express.static('uploads'));
 
 // Multer Setup
@@ -33,7 +35,21 @@ const upload = multer({ storage });
 // MongoDB Connection
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/grievance_system';
 mongoose.connect(MONGODB_URI)
-  .then(() => console.log('MongoDB Connected'))
+  .then(async () => {
+    console.log('MongoDB Connected');
+    // Initialize Departments
+    const depts = [
+      'Municipal Corporation',
+      'Road Department',
+      'Sewage Department',
+      'Waste Department',
+      'Water Department',
+      'Electric Department'
+    ];
+    for (const name of depts) {
+      await Department.findOneAndUpdate({ name }, { name }, { upsert: true });
+    }
+  })
   .catch(err => console.log('MongoDB Connection Error:', err));
 
 // Routes
@@ -152,8 +168,12 @@ app.post('/api/auth/verify-otp', async (req, res) => {
 
 // 1. Submit a complaint (Supports Text + Image)
 app.post('/api/complaints', upload.single('image'), async (req, res) => {
-  const { text, location, lat, lon, department: userSelectedDepartment } = req.body;
+  const { text, location, lat, lon, department: userSelectedDepartment, userAadhar } = req.body;
   const imageFile = req.file;
+
+  if (!userAadhar) {
+    return res.status(400).json({ error: 'User Aadhar is required' });
+  }
 
   if (!text && !imageFile) {
     return res.status(400).json({ error: 'Complaint text or image is required' });
@@ -229,7 +249,8 @@ app.post('/api/complaints', upload.single('image'), async (req, res) => {
       confidence,
       department: finalDepartment,
       imageUrl,
-      imageDescription
+      imageDescription,
+      userAadhar
     });
 
     const savedGrievance = await newGrievance.save();
@@ -261,10 +282,23 @@ app.get('/api/complaints/:id', async (req, res) => {
   }
 });
 
+// 2.6 Get complaints by User Aadhar
+app.get('/api/complaints/user/:aadhar', async (req, res) => {
+  try {
+    const grievances = await Grievance.find({ userAadhar: req.params.aadhar }).sort({ createdAt: -1 });
+    res.json(grievances);
+  } catch (err) {
+    res.status(500).json({ error: 'Server Error' });
+  }
+});
+
 // 3. Update status
 app.patch('/api/complaints/:id', async (req, res) => {
   const { status, resolutionImage, isAiGenerated, aiDetectionConfidence, similarityScore, isMatch } = req.body;
   try {
+    const complaint = await Grievance.findById(req.params.id);
+    if (!complaint) return res.status(404).json({ error: 'Complaint not found' });
+
     const updateData = { status };
     if (resolutionImage) updateData.resolutionImage = resolutionImage;
     if (typeof isAiGenerated === 'boolean') updateData.isAiGenerated = isAiGenerated;
@@ -272,12 +306,63 @@ app.patch('/api/complaints/:id', async (req, res) => {
     if (typeof similarityScore === 'number') updateData.similarityScore = similarityScore;
     if (typeof isMatch === 'boolean') updateData.isMatch = isMatch;
 
+    // Token Award Logic
+    if (status === 'Resolved' && !complaint.tokensAwarded) {
+      const rewardMap = { 'High': 50, 'Medium': 30, 'Low': 10 };
+      const tokens = rewardMap[complaint.priority] || 10;
+
+      // Award to User (Update JSON file)
+      try {
+        const usersPath = path.join(__dirname, 'data', 'users.json');
+        const usersData = JSON.parse(fs.readFileSync(usersPath));
+        const userIndex = usersData.findIndex(u => u.aadhar === complaint.userAadhar);
+        if (userIndex !== -1) {
+          usersData[userIndex].tokens = (usersData[userIndex].tokens || 0) + tokens;
+          fs.writeFileSync(usersPath, JSON.stringify(usersData, null, 2));
+          console.log(`Awarded ${tokens} tokens to user ${complaint.userAadhar}`);
+        }
+      } catch (err) {
+        console.error('Error updating user tokens:', err);
+      }
+
+      // Award to Department
+      await Department.findOneAndUpdate(
+        { name: complaint.department },
+        { $inc: { tokens: tokens } }
+      );
+      console.log(`Awarded ${tokens} tokens to department ${complaint.department}`);
+
+      updateData.tokensAwarded = true;
+    }
+
     const updated = await Grievance.findByIdAndUpdate(
       req.params.id,
       updateData,
       { new: true }
     );
     res.json(updated);
+  } catch (err) {
+    console.error('Update Status Error:', err);
+    res.status(500).json({ error: 'Server Error' });
+  }
+});
+
+// 3.5 Get user tokens
+app.get('/api/user/:aadhar/tokens', async (req, res) => {
+  try {
+    const usersData = JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'users.json')));
+    const user = usersData.find(u => u.aadhar === req.params.aadhar);
+    res.json({ tokens: user ? (user.tokens || 0) : 0 });
+  } catch (err) {
+    res.status(500).json({ error: 'Server Error' });
+  }
+});
+
+// 3.6 Get department tokens
+app.get('/api/departments/tokens', async (req, res) => {
+  try {
+    const departments = await Department.find();
+    res.json(departments);
   } catch (err) {
     res.status(500).json({ error: 'Server Error' });
   }
