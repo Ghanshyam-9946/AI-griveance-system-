@@ -252,6 +252,22 @@ app.post('/api/dept/login', async (req, res) => {
     res.status(500).json({ error: 'Server Error' });
   }
 });
+// Proxy for frontend image analysis
+app.post('/api/analyze-image', upload.single('image'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Image required' });
+  try {
+    const formData = new FormData();
+    formData.append('file', fs.createReadStream(req.file.path));
+    const aiRes = await axios.post(`${AI_SERVICE_URL}/analyze-image`, formData, {
+      headers: formData.getHeaders()
+    });
+    res.json(aiRes.data);
+  } catch (err) {
+    console.error("Proxy analyze-image error:", err.message);
+    res.status(500).json({ error: 'AI Analysis Failed' });
+  }
+});
+
 // 1. Submit a complaint (Supports Text + Image)
 app.post('/api/complaints', upload.single('image'), async (req, res) => {
   const { text, location, lat, lon, department: userSelectedDepartment, userAadhar, ward, zone } = req.body;
@@ -308,8 +324,8 @@ app.post('/api/complaints', upload.single('image'), async (req, res) => {
 
     // If frontend didn't send a department, fallback to AI logic
     if (!userSelectedDepartment || userSelectedDepartment === 'Municipal Corporation') {
-      const cat = category.toLowerCase();
-      const textLower = text.toLowerCase();
+      const cat = (category || '').toLowerCase();
+      const textLower = (text || '').toLowerCase();
 
       if (cat.includes('road') || textLower.includes('road') || textLower.includes('sadak')) {
         finalDepartment = 'Road Department';
