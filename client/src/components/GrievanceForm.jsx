@@ -98,6 +98,13 @@ const GrievanceForm = ({ userAadhar, onSuccess }) => {
           (p.length < 20 && !p.toLowerCase().includes('bhopal') && !p.toLowerCase().includes('india') && !p.toLowerCase().includes('madhya'))
         );
         area = bestPart || parts[0];
+
+        // Specific Ward 85 Mapping
+        const lowerFull = full.toLowerCase();
+        const ward85Keywords = ['anandnagar', 'kokta', 'patel nagar', 'indus towne', 'raisen road', 'rapadia', 'bansal college', 'chhan', 'bansal institute'];
+        if (ward85Keywords.some(key => lowerFull.includes(key))) {
+          area = "Ward 85";
+        }
       }
     }
     
