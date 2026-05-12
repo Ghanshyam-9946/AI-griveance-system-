@@ -159,16 +159,22 @@ const Dashboard = ({ user }) => {
   };
 
   const deptFilteredComplaints = complaints.filter(c => {
-    // If no ward is assigned, Municipal Corporation acts as Master Admin
+    // ✅ CASE 1: Municipal Corporation Master Admin (no ward assigned) — sees ALL complaints
     if (userDepartment === 'Municipal Corporation' && !userWard) {
       return (selectedDeptFilter === 'All' || c.department === selectedDeptFilter);
     }
 
-    // STRICT ISOLATION for everyone else (including Ward-level Municipal and Road officers)
-    const matchesDept = userDepartment
-      ? (c.department === userDepartment)
-      : (selectedDeptFilter === 'All' || c.department === selectedDeptFilter);
-    
+    // ✅ CASE 2: Specific Department Officers (Road, Sewage, Water, Waste, Electric)
+    //    → They see ALL complaints assigned to their department (city-wide, no ward filter)
+    const specificDepts = ['Road Department', 'Sewage Department', 'Waste Department', 'Water Department', 'Electric Department'];
+    if (userDepartment && specificDepts.includes(userDepartment)) {
+      return c.department === userDepartment;
+    }
+
+    // ✅ CASE 3: Ward-level Municipal Corporation officers
+    //    → See complaints in their ward only, with dept filter support
+    const matchesDept = selectedDeptFilter === 'All' || c.department === selectedDeptFilter;
+
     // Normalize and compare wards/areas using flexible matching
     const clean = (w) => w?.toLowerCase().replace(/ward|zone|area/g, '').trim();
     const cWard = clean(c.ward);
@@ -178,7 +184,7 @@ const Dashboard = ({ user }) => {
 
     const matchesWard = uWard ? (cWard === uWard || cWard?.includes(uWard) || uWard?.includes(cWard)) : true;
     const matchesZone = uZone ? (cZone === uZone || cZone?.includes(uZone) || uZone?.includes(cZone)) : true;
-    
+
     return matchesDept && (matchesWard || matchesZone);
   });
 
@@ -620,39 +626,39 @@ const Dashboard = ({ user }) => {
                   <X size={24} color="var(--gov-text-muted)" />
                 </button>
               </div>
-              
+
               <div style={{ marginBottom: '1.5rem' }}>
                 <label className="form-label">Latitude</label>
-                <input 
-                  type="number" 
+                <input
+                  type="number"
                   step="any"
-                  className="form-input" 
-                  value={editCoordsModal.lat} 
-                  onChange={(e) => setEditCoordsModal({...editCoordsModal, lat: e.target.value})} 
+                  className="form-input"
+                  value={editCoordsModal.lat}
+                  onChange={(e) => setEditCoordsModal({ ...editCoordsModal, lat: e.target.value })}
                   placeholder="e.g. 19.0760"
                 />
               </div>
-              
+
               <div style={{ marginBottom: '2.5rem' }}>
                 <label className="form-label">Longitude</label>
-                <input 
-                  type="number" 
+                <input
+                  type="number"
                   step="any"
-                  className="form-input" 
-                  value={editCoordsModal.lon} 
-                  onChange={(e) => setEditCoordsModal({...editCoordsModal, lon: e.target.value})} 
+                  className="form-input"
+                  value={editCoordsModal.lon}
+                  onChange={(e) => setEditCoordsModal({ ...editCoordsModal, lon: e.target.value })}
                   placeholder="e.g. 72.8777"
                 />
               </div>
 
               <div style={{ marginBottom: '2.5rem' }}>
                 <label className="form-label">Pick on Map</label>
-                <MapPicker 
+                <MapPicker
                   initialPos={editCoordsModal.lat && editCoordsModal.lon ? [parseFloat(editCoordsModal.lat), parseFloat(editCoordsModal.lon)] : [20.5937, 78.9629]}
-                  onLocationSelect={(data) => setEditCoordsModal({...editCoordsModal, lat: data.lat.toString(), lon: data.lon.toString()})}
+                  onLocationSelect={(data) => setEditCoordsModal({ ...editCoordsModal, lat: data.lat.toString(), lon: data.lon.toString() })}
                 />
               </div>
-              
+
               <div style={{ display: 'flex', gap: '1rem' }}>
                 <button onClick={() => setEditCoordsModal({ open: false })} className="btn-gov-secondary" style={{ flex: 1 }}>Cancel</button>
                 <button onClick={handleUpdateCoords} className="btn-gov-primary" style={{ flex: 2 }}>Update Location</button>
@@ -705,7 +711,7 @@ const Dashboard = ({ user }) => {
 
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', textAlign: 'center' }}>
                         <div style={{ background: '#fffbeb', padding: '1rem', borderRadius: '16px' }}>
-                           <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#f59e0b' }}>{dStats.pending}</div>
+                          <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#f59e0b' }}>{dStats.pending}</div>
                           <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#92400e' }}>{t('admin.pending').toUpperCase()}</div>
                         </div>
                         <div style={{ background: '#eff6ff', padding: '1rem', borderRadius: '16px' }}>
