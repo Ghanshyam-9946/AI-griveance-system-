@@ -81,13 +81,24 @@ const GrievanceForm = ({ userAadhar, onSuccess }) => {
     // 1. Try structured fields
     let area = addr.suburb || addr.neighbourhood || addr.residential || addr.village || addr.town;
     
-    // 2. Fallback: Search for "Ward X" or "Zone X" patterns in full address string
+    // 2. Fallback: Search for "Ward X" or "Zone X" or known key neighborhoods
     if (!area || (!area.toLowerCase().includes('ward') && !area.toLowerCase().includes('zone'))) {
       const wardMatch = full.match(/ward\s*(\d+)/i);
       const zoneMatch = full.match(/zone\s*(\d+)/i);
       if (wardMatch) area = `Ward ${wardMatch[1]}`;
       else if (zoneMatch) area = `Zone ${zoneMatch[1]}`;
-      else if (!area) area = full.split(',')[0];
+      else {
+        // Find the best candidate from address parts (excluding city/country)
+        const parts = full.split(',').map(p => p.trim());
+        const bestPart = parts.find(p => 
+          p.toLowerCase().includes('kokta') || 
+          p.toLowerCase().includes('nagar') || 
+          p.toLowerCase().includes('ward') || 
+          p.toLowerCase().includes('sector') ||
+          (p.length < 20 && !p.toLowerCase().includes('bhopal') && !p.toLowerCase().includes('india') && !p.toLowerCase().includes('madhya'))
+        );
+        area = bestPart || parts[0];
+      }
     }
     
     const city = addr.city || addr.county || addr.state || "Bhopal";
@@ -104,7 +115,11 @@ const GrievanceForm = ({ userAadhar, onSuccess }) => {
     const timer = setTimeout(async () => {
       setGeocoding(true);
       try {
-        const res = await axios.get(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(location)}&format=json&addressdetails=1&limit=5`, {
+        // Narrow search to Bhopal if it looks like a local address
+        let searchQuery = location;
+        if (!location.toLowerCase().includes('bhopal')) searchQuery += ", Bhopal";
+        
+        const res = await axios.get(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(searchQuery)}&format=json&addressdetails=1&limit=5`, {
           headers: { 'User-Agent': 'AIGrievanceSystem/1.0' }
         });
         
