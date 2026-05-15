@@ -133,7 +133,7 @@ app.post('/api/auth/send-otp', async (req, res) => {
       try {
         await twilioClient.verify.v2.services(process.env.TWILIO_SERVICE_SID)
           .verifications
-          .create({to: phone, channel: 'sms'});
+          .create({ to: phone, channel: 'sms' });
         console.log(`Twilio Verify requested for ${phone}`);
       } catch (twilioErr) {
         console.error('Twilio Verify API Error:', twilioErr.message);
@@ -189,8 +189,8 @@ app.post('/api/auth/verify-otp', async (req, res) => {
       try {
         const verificationCheck = await twilioClient.verify.v2.services(process.env.TWILIO_SERVICE_SID)
           .verificationChecks
-          .create({to: phone, code: otp});
-        
+          .create({ to: phone, code: otp });
+
         if (verificationCheck.status !== 'approved') {
           return res.status(400).json({ error: 'Invalid or expired OTP' });
         }
@@ -267,8 +267,8 @@ app.post('/api/dept/login', async (req, res) => {
   const { emailOrId, password } = req.body;
 
   try {
-    const user = await User.findOne({ 
-      $or: [{ email: emailOrId }, { employeeId: emailOrId }] 
+    const user = await User.findOne({
+      $or: [{ email: emailOrId }, { employeeId: emailOrId }]
     });
 
     if (!user) {
@@ -289,6 +289,22 @@ app.post('/api/dept/login', async (req, res) => {
     res.status(500).json({ error: 'Server Error' });
   }
 });
+// Proxy for frontend image analysis
+app.post('/api/analyze-image', upload.single('image'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Image required' });
+  try {
+    const formData = new FormData();
+    formData.append('file', fs.createReadStream(req.file.path));
+    const aiRes = await axios.post(`${AI_SERVICE_URL}/analyze-image`, formData, {
+      headers: formData.getHeaders()
+    });
+    res.json(aiRes.data);
+  } catch (err) {
+    console.error("Proxy analyze-image error:", err.message);
+    res.status(500).json({ error: 'AI Analysis Failed' });
+  }
+});
+
 // 1. Submit a complaint (Supports Text + Image)
 app.post('/api/complaints', upload.single('image'), async (req, res) => {
   const { text, location, lat, lon, department: userSelectedDepartment, userEmail, ward, zone } = req.body;
@@ -345,8 +361,8 @@ app.post('/api/complaints', upload.single('image'), async (req, res) => {
 
     // If frontend didn't send a department, fallback to AI logic
     if (!userSelectedDepartment || userSelectedDepartment === 'Municipal Corporation') {
-      const cat = category.toLowerCase();
-      const textLower = text.toLowerCase();
+      const cat = (category || '').toLowerCase();
+      const textLower = (text || '').toLowerCase();
 
       if (cat.includes('road') || textLower.includes('road') || textLower.includes('sadak')) {
         finalDepartment = 'Road Department';
@@ -409,8 +425,8 @@ app.get('/api/complaints/:id', async (req, res) => {
     // 1. Try full ObjectId lookup first if it looks like one
     if (id.length === 24 && /^[0-9a-fA-F]{24}$/.test(id)) {
       complaint = await Grievance.findById(id);
-    } 
-    
+    }
+
     // 2. If not found or if it's an 8-char short ID, try suffix search
     if (!complaint && id.length === 8) {
       const allComplaints = await Grievance.find();
@@ -440,9 +456,9 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
   const R = 6371; // Radius of Earth in km
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = 
+  const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
     Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
@@ -464,10 +480,10 @@ app.patch('/api/complaints/:id', async (req, res) => {
       if (complaint.lat && complaint.lon) {
         const distance = haversineDistance(complaint.lat, complaint.lon, resolutionLat, resolutionLon);
         console.log(`Resolution distance check: ${distance.toFixed(3)} km`);
-        
+
         // Threshold: 100 meters (0.1 km)
         if (distance > 0.1) {
-          return res.status(400).json({ 
+          return res.status(400).json({
             error: `Resolution denied. You are too far from the original incident location (${(distance * 1000).toFixed(0)}m away). You must be within 100m to resolve the case.`,
             distance: distance
           });
@@ -573,7 +589,7 @@ app.get('/api/public-stats', async (req, res) => {
   try {
     const resolvedCount = await Grievance.countDocuments({ status: 'Resolved' });
     const totalCount = await Grievance.countDocuments();
-    
+
     // Average AI Confidence
     const avgConfidenceResult = await Grievance.aggregate([
       { $match: { confidence: { $gt: 0 } } },
@@ -688,12 +704,12 @@ app.post('/api/compare-images', upload.single('image'), async (req, res) => {
       console.error("AI Service Response Error:", err.response.data);
     }
     if (resolutionFile && fs.existsSync(resolutionFile.path)) fs.unlinkSync(resolutionFile.path);
-    res.status(500).json({ 
-      error: 'Image comparison failed', 
+    res.status(500).json({
+      error: 'Image comparison failed',
       details: err.message,
       aiError: err.response ? err.response.data : null,
-      similarity_score: 0, 
-      is_match: false 
+      similarity_score: 0,
+      is_match: false
     });
   }
 });

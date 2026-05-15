@@ -43,6 +43,10 @@ const GrievanceForm = ({ userAadhar, onSuccess, onBack }) => {
   const [ward, setWard] = useState(null);
   const [zone, setZone] = useState(null);
   const [showMap, setShowMap] = useState(false);
+  const [isManualInput, setIsManualInput] = useState(false);
+  const [geocoding, setGeocoding] = useState(false);
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   const fileInputRef = useRef(null);
 
@@ -72,7 +76,118 @@ const GrievanceForm = ({ userAadhar, onSuccess, onBack }) => {
     );
   };
 
-  useEffect(() => { fetchExactLocation(); }, []);
+  useEffect(() => {
+    fetchExactLocation();
+  }, []);
+
+  const extractWardZone = (sug) => {
+    const addr = sug.address || {};
+    const full = sug.display_name || "";
+    
+    // 1. Try structured fields
+    let area = addr.suburb || addr.neighbourhood || addr.residential || addr.village || addr.town;
+    
+    // 2. Fallback: Search for "Ward X" or "Zone X" or known key neighborhoods
+    if (!area || (!area.toLowerCase().includes('ward') && !area.toLowerCase().includes('zone'))) {
+      const wardMatch = full.match(/ward\s*(\d+)/i);
+      const zoneMatch = full.match(/zone\s*(\d+)/i);
+      if (wardMatch) area = `Ward ${wardMatch[1]}`;
+      else if (zoneMatch) area = `Zone ${zoneMatch[1]}`;
+      else {
+        // Find the best candidate from address parts (excluding city/country)
+        const parts = full.split(',').map(p => p.trim());
+        const bestPart = parts.find(p => 
+          p.toLowerCase().includes('kokta') || 
+          p.toLowerCase().includes('nagar') || 
+          p.toLowerCase().includes('ward') || 
+          p.toLowerCase().includes('sector') ||
+          (p.length < 20 && !p.toLowerCase().includes('bhopal') && !p.toLowerCase().includes('india') && !p.toLowerCase().includes('madhya'))
+        );
+        area = bestPart || parts[0];
+
+        // Specific Ward 85 Mapping
+        const lowerFull = full.toLowerCase();
+        const ward85Keywords = ['anandnagar', 'kokta', 'patel nagar', 'indus towne', 'raisen road', 'rapadia', 'bansal college', 'chhan', 'bansal institute'];
+        if (ward85Keywords.some(key => lowerFull.includes(key))) {
+          area = "Ward 85";
+        }
+      }
+    }
+    
+    const city = addr.city || addr.county || addr.state || "Bhopal";
+    return { area, city };
+  };
+
+  // Forward geocoding: Address string -> Suggestions & Coordinates
+  useEffect(() => {
+    if (!isManualInput || !location || location.length < 3) {
+      setSuggestions([]);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setGeocoding(true);
+      try {
+        // Narrow search to Bhopal if it looks like a local address
+        let searchQuery = location;
+        if (!location.toLowerCase().includes('bhopal')) searchQuery += ", Bhopal";
+        
+        const res = await axios.get(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(searchQuery)}&format=json&addressdetails=1&limit=5`, {
+          headers: { 'User-Agent': 'AIGrievanceSystem/1.0' }
+        });
+        
+        if (res.data && res.data.length > 0) {
+          setSuggestions(res.data);
+          setShowSuggestions(true);
+          
+          // Auto-pick the first result's coordinates immediately (like Flipkart)
+          const first = res.data[0];
+          const lat = parseFloat(first.lat);
+          const lon = parseFloat(first.lon);
+          setCoords({ lat, lon });
+          
+          const { area, city } = extractWardZone(first);
+          setWard(area);
+          setZone(city);
+          console.log(`Auto-synced: ${area}, ${city} at ${lat}, ${lon}`);
+        }
+      } catch (err) {
+        console.error("Search failed", err);
+      } finally {
+        setGeocoding(false);
+      }
+    }, 500); // Super fast: 500ms debounce
+
+    return () => clearTimeout(timer);
+  }, [location, isManualInput]);
+
+  const handleSuggestionClick = (sug) => {
+    setLocation(sug.display_name);
+    setCoords({ lat: parseFloat(sug.lat), lon: parseFloat(sug.lon) });
+    
+    const { area, city } = extractWardZone(sug);
+    setWard(area);
+    setZone(city);
+    
+    setSuggestions([]);
+    setShowSuggestions(false);
+    setIsManualInput(false);
+  };
+
+  const DEPARTMENTS = [
+    'Municipal Corporation',
+    'Road Department',
+    'Sewage Department',
+    'Waste Department',
+    'Water Department',
+    'Electric Department',
+    'Public Works Department'
+  ];
+
+  const handleLocationSelect = (data) => {
+    setLocation(data.address);
+    setCoords({ lat: data.lat, lon: data.lon });
+  };
 
   const handleImageChange = async (e) => {
     const file = e.target.files[0];
@@ -314,6 +429,39 @@ const GrievanceForm = ({ userAadhar, onSuccess, onBack }) => {
                         <p className="text-sm text-gov-navy leading-relaxed font-medium">AI has automatically identified the most suitable department for this grievance.</p>
                       </div>
                     </div>
+
+                    {coords.lat && !geocoding && (
+                      <div className="mt-8 p-5 bg-green-50 rounded-xl border border-green-100 shadow-sm">
+                        <div className="flex justify-between items-center mb-4">
+                           <p className="text-xs text-gov-green font-bold flex items-center gap-2 m-0 uppercase tracking-widest">
+                              <ShieldCheck className="w-4 h-4" /> LOCATION SYNCED
+                           </p>
+                           <span className="text-[10px] font-bold text-gov-green opacity-80">{coords.lat.toFixed(4)}, {coords.lon.toFixed(4)}</span>
+                        </div>
+                        
+                        <div className="flex items-center gap-4 bg-white p-3 rounded-lg border border-green-100 shadow-sm">
+                          <div className="bg-gov-navy text-white p-2 rounded-md flex">
+                            <MapPin className="w-4 h-4" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-[10px] font-bold text-gray-500 m-0 uppercase tracking-widest">Routing to Office</p>
+                            <input 
+                              type="text" 
+                              value={ward || ''} 
+                              onChange={(e) => setWard(e.target.value)}
+                              className="text-sm font-bold text-gov-navy border-none bg-transparent w-full outline-none p-0 focus:ring-0"
+                              placeholder="Enter Ward/Area"
+                            />
+                          </div>
+                          <button onClick={() => setIsManualInput(true)} className="p-2 hover:bg-gray-100 rounded-md transition-all">
+                            <RefreshCw className="w-4 h-4 text-gov-navy opacity-50" />
+                          </button>
+                        </div>
+                        <p className="text-[10px] text-gray-500 mt-3 italic font-bold">
+                          * This complaint will be assigned to the <strong className="text-gov-navy">{ward || 'local'}</strong> department office.
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex justify-between mt-12 pt-8 border-t">

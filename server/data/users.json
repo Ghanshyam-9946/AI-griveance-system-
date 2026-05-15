@@ -33,5 +33,12 @@
     "tokens": 3200,
     "name": "Vikram Malhotra",
     "rank": "Infrastructure Guardian"
+  },
+  {
+    "aadhar": "444444444444",
+    "phone": "9770473055",
+    "tokens": 30,
+    "name": "New User",
+    "rank": "New Reporter"
   }
 ]

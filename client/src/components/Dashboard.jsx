@@ -180,14 +180,23 @@ const Dashboard = ({ user }) => {
   };
 
   const deptFilteredComplaints = complaints.filter(c => {
+    // ✅ CASE 1: Municipal Corporation Master Admin (no ward assigned) — sees ALL complaints
     if (userDepartment === 'Municipal Corporation' && !userWard) {
       return (selectedDeptFilter === 'All' || c.department === selectedDeptFilter);
     }
 
-    const matchesDept = userDepartment
-      ? (c.department === userDepartment)
-      : (selectedDeptFilter === 'All' || c.department === selectedDeptFilter);
-    
+    // ✅ CASE 2: Specific Department Officers (Road, Sewage, Water, Waste, Electric)
+    //    → They see ALL complaints assigned to their department (city-wide, no ward filter)
+    const specificDepts = ['Road Department', 'Sewage Department', 'Waste Department', 'Water Department', 'Electric Department'];
+    if (userDepartment && specificDepts.includes(userDepartment)) {
+      return c.department === userDepartment;
+    }
+
+    // ✅ CASE 3: Ward-level Municipal Corporation officers
+    //    → See complaints in their ward only, with dept filter support
+    const matchesDept = selectedDeptFilter === 'All' || c.department === selectedDeptFilter;
+
+    // Normalize and compare wards/areas using flexible matching
     const clean = (w) => w?.toLowerCase().replace(/ward|zone|area/g, '').trim();
     const cWard = clean(c.ward);
     const uWard = clean(userWard);
@@ -196,7 +205,7 @@ const Dashboard = ({ user }) => {
 
     const matchesWard = uWard ? (cWard === uWard || cWard?.includes(uWard) || uWard?.includes(cWard)) : true;
     const matchesZone = uZone ? (cZone === uZone || cZone?.includes(uZone) || uZone?.includes(cZone)) : true;
-    
+
     return matchesDept && (matchesWard || matchesZone);
   });
 
@@ -587,6 +596,106 @@ const Dashboard = ({ user }) => {
         )}
       </AnimatePresence>
 
+      {/* View Image Modal */}
+      <AnimatePresence>
+        {viewImageModal.open && (
+          <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} style={{ position: 'relative', maxWidth: viewImageModal.originalImage ? '1000px' : '600px', width: '100%' }}>
+              <button onClick={() => setViewImageModal({ open: false })} style={{ position: 'absolute', top: '-3rem', right: 0, color: 'white', background: 'none', border: 'none', cursor: 'pointer' }}>
+                <X size={32} />
+              </button>
+
+              <div style={{ background: 'white', borderRadius: '32px', padding: '2rem' }}>
+                <h3 style={{ margin: '0 0 1.5rem', fontSize: '1.25rem', fontWeight: 900, color: 'var(--gov-navy)' }}>{viewImageModal.title}</h3>
+
+                <div style={{ display: 'grid', gridTemplateColumns: viewImageModal.originalImage ? '1fr 1fr' : '1fr', gap: '1.5rem' }}>
+                  {viewImageModal.originalImage && (
+                    <div>
+                      <p style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--gov-text-muted)', marginBottom: '0.75rem', textTransform: 'uppercase' }}>Original Grievance</p>
+                      <img src={`http://localhost:5000${viewImageModal.originalImage}`} style={{ width: '100%', borderRadius: '16px', height: '400px', objectFit: 'cover' }} />
+                    </div>
+                  )}
+                  <div>
+                    <p style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--gov-text-muted)', marginBottom: '0.75rem', textTransform: 'uppercase' }}>{viewImageModal.originalImage ? 'Resolution Proof' : 'Image Evidence'}</p>
+                    <img src={viewImageModal.image.startsWith('data:') ? viewImageModal.image : `http://localhost:5000${viewImageModal.image}`} style={{ width: '100%', borderRadius: '16px', height: '400px', objectFit: 'cover' }} />
+                  </div>
+                </div>
+
+                {viewImageModal.title === 'Resolution Proof' && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginTop: '2rem' }}>
+                    <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '16px', textAlign: 'center' }}>
+                      <p style={{ fontSize: '0.6rem', fontWeight: 800, color: '#64748b', marginBottom: '0.5rem', textTransform: 'uppercase' }}>AI Integrity</p>
+                      <div style={{ color: viewImageModal.isAi ? '#ef4444' : '#10b981', fontWeight: 800 }}>{viewImageModal.isAi ? 'FAILED' : 'AUTHENTIC'}</div>
+                    </div>
+                    <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '16px', textAlign: 'center' }}>
+                      <p style={{ fontSize: '0.6rem', fontWeight: 800, color: '#64748b', marginBottom: '0.5rem', textTransform: 'uppercase' }}>Similarity</p>
+                      <div style={{ color: 'var(--gov-navy)', fontWeight: 800 }}>{(viewImageModal.similarity * 100).toFixed(0)}% Match</div>
+                    </div>
+                    <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '16px', textAlign: 'center' }}>
+                      <p style={{ fontSize: '0.6rem', fontWeight: 800, color: '#64748b', marginBottom: '0.5rem', textTransform: 'uppercase' }}>GPS Status</p>
+                      <div style={{ color: '#10b981', fontWeight: 800 }}>VERIFIED</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Edit Coordinates Modal */}
+      <AnimatePresence>
+        {editCoordsModal.open && (
+          <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(10px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
+            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} style={{ background: 'white', borderRadius: '32px', padding: '2.5rem', maxWidth: '450px', width: '100%' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                <h3 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 900, color: 'var(--gov-navy)' }}>Edit Coordinates</h3>
+                <button onClick={() => setEditCoordsModal({ open: false })} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+                  <X size={24} color="var(--gov-text-muted)" />
+                </button>
+              </div>
+
+              <div style={{ marginBottom: '1.5rem' }}>
+                <label className="form-label">Latitude</label>
+                <input
+                  type="number"
+                  step="any"
+                  className="form-input"
+                  value={editCoordsModal.lat}
+                  onChange={(e) => setEditCoordsModal({ ...editCoordsModal, lat: e.target.value })}
+                  placeholder="e.g. 19.0760"
+                />
+              </div>
+
+              <div style={{ marginBottom: '2.5rem' }}>
+                <label className="form-label">Longitude</label>
+                <input
+                  type="number"
+                  step="any"
+                  className="form-input"
+                  value={editCoordsModal.lon}
+                  onChange={(e) => setEditCoordsModal({ ...editCoordsModal, lon: e.target.value })}
+                  placeholder="e.g. 72.8777"
+                />
+              </div>
+
+              <div style={{ marginBottom: '2.5rem' }}>
+                <label className="form-label">Pick on Map</label>
+                <MapPicker
+                  initialPos={editCoordsModal.lat && editCoordsModal.lon ? [parseFloat(editCoordsModal.lat), parseFloat(editCoordsModal.lon)] : [20.5937, 78.9629]}
+                  onLocationSelect={(data) => setEditCoordsModal({ ...editCoordsModal, lat: data.lat.toString(), lon: data.lon.toString() })}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '1rem' }}>
+                <button onClick={() => setEditCoordsModal({ open: false })} className="btn-gov-secondary" style={{ flex: 1 }}>Cancel</button>
+                <button onClick={handleUpdateCoords} className="btn-gov-primary" style={{ flex: 2 }}>Update Location</button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Intelligence Performance Modal */}
       <AnimatePresence>
         {perfModalOpen && (
@@ -638,6 +747,7 @@ const Dashboard = ({ user }) => {
                           </div>
                         </div>
 
+<<<<<<< HEAD
                         <div className="space-y-6">
                           <div className="grid grid-cols-3 gap-3">
                             <div className="p-3 bg-gray-50 rounded-lg text-center">
@@ -653,6 +763,22 @@ const Dashboard = ({ user }) => {
                               <p className="text-[8px] text-gray-400 font-bold uppercase">Done</p>
                             </div>
                           </div>
+=======
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', textAlign: 'center' }}>
+                        <div style={{ background: '#fffbeb', padding: '1rem', borderRadius: '16px' }}>
+                          <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#f59e0b' }}>{dStats.pending}</div>
+                          <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#92400e' }}>{t('admin.pending').toUpperCase()}</div>
+                        </div>
+                        <div style={{ background: '#eff6ff', padding: '1rem', borderRadius: '16px' }}>
+                          <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#3b82f6' }}>{dStats.inProgress}</div>
+                          <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#1e40af' }}>{t('admin.inProgress').toUpperCase()}</div>
+                        </div>
+                        <div style={{ background: '#f0fdf4', padding: '1rem', borderRadius: '16px' }}>
+                          <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#10b981' }}>{dStats.resolved}</div>
+                          <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#166534' }}>{t('admin.resolved').toUpperCase()}</div>
+                        </div>
+                      </div>
+>>>>>>> 889b2e26702a4b84ba0e7b0effda1975fad490d4
 
                           <div className="space-y-2">
                             <div className="flex justify-between items-end">
