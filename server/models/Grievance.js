@@ -99,6 +99,14 @@ const GrievanceSchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
   },
+  upvotes: {
+    type: Number,
+    default: 0,
+  },
+  duplicateEmails: {
+    type: [String],
+    default: [],
+  }
 });
 
 module.exports = mongoose.model('Grievance', GrievanceSchema);

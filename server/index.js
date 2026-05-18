@@ -158,11 +158,15 @@ app.post('/api/auth/send-otp', async (req, res) => {
 
 app.post('/api/auth/verify-otp', async (req, res) => {
   const { aadhar, otp } = req.body;
+  console.log(`[AUTH] Aadhar OTP verification for: ${aadhar}`);
 
   try {
     const usersData = JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'users.json')));
     const user = usersData.find(u => u.aadhar === aadhar);
-    if (!user) return res.status(404).json({ error: 'Aadhar not linked to any account' });
+    if (!user) {
+      console.log(`[AUTH] Aadhar not found: ${aadhar}`);
+      return res.status(404).json({ error: 'Aadhar not linked to any account' });
+    }
 
     let phone = user.phone;
     if (!phone.startsWith('+91')) {
@@ -174,13 +178,15 @@ app.post('/api/auth/verify-otp', async (req, res) => {
     if (record) {
       if (Date.now() > record.expiresAt) {
         delete otpStore[aadhar];
+        console.log(`[AUTH] OTP expired for: ${aadhar}`);
         return res.status(400).json({ error: 'OTP has expired' });
       }
       if (record.otp === otp) {
         delete otpStore[aadhar];
+        console.log(`[AUTH] Aadhar login successful: ${user.name}`);
         return res.json({ message: 'Login successful', token: 'mock-jwt-token' });
       }
-      // If it exists but doesn't match, we still return error (don't fall through to Twilio to avoid confusion)
+      console.log(`[AUTH] Invalid OTP for: ${aadhar} (Expected: ${record.otp}, Got: ${otp})`);
       return res.status(400).json({ error: 'Invalid OTP' });
     }
 
@@ -192,6 +198,7 @@ app.post('/api/auth/verify-otp', async (req, res) => {
           .create({ to: phone, code: otp });
 
         if (verificationCheck.status !== 'approved') {
+          console.log(`[AUTH] Twilio verification failed for: ${phone}`);
           return res.status(400).json({ error: 'Invalid or expired OTP' });
         }
       } catch (twilioErr) {
@@ -199,11 +206,12 @@ app.post('/api/auth/verify-otp', async (req, res) => {
         return res.status(400).json({ error: 'Verification failed. Please try again.' });
       }
     } else {
-      // If no Twilio and no record in store
+      console.log(`[AUTH] No active OTP record for: ${aadhar}`);
       return res.status(400).json({ error: 'No OTP requested or expired' });
     }
 
     // Success
+    console.log(`[AUTH] Aadhar login successful via Twilio: ${user.name}`);
     res.json({ message: 'Login successful', token: 'mock-jwt-token' });
   } catch (err) {
     console.error('Verify OTP Error:', err);
@@ -260,11 +268,8 @@ app.post('/api/dept/register', async (req, res) => {
 });
 
 app.post('/api/dept/login', async (req, res) => {
-
-  // ✅ YE LINE ADD KAR (MOST IMPORTANT)
-  console.log("JWT_SECRET CHECK 👉", process.env.JWT_SECRET);
-
   const { emailOrId, password } = req.body;
+  console.log(`[AUTH] Login attempt for: ${emailOrId}`);
 
   try {
     const user = await User.findOne({
@@ -272,14 +277,17 @@ app.post('/api/dept/login', async (req, res) => {
     });
 
     if (!user) {
+      console.log(`[AUTH] User not found: ${emailOrId}`);
       return res.status(400).json({ error: 'Invalid Credentials' });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
+      console.log(`[AUTH] Password mismatch for: ${emailOrId}`);
       return res.status(400).json({ error: 'Invalid Credentials' });
     }
 
+    console.log(`[AUTH] Login successful for: ${user.email} (${user.department})`);
     const payload = { user: { id: user.id, department: user.department, fullName: user.fullName, ward: user.ward, zone: user.zone } };
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '24h' });
 
@@ -377,6 +385,37 @@ app.post('/api/complaints', upload.single('image'), async (req, res) => {
       }
     }
 
+    // 2.8 Check for duplicate pending/in-progress complaints within 150m of same category
+    if (lat && lon) {
+      const parsedLat = parseFloat(lat);
+      const parsedLon = parseFloat(lon);
+      if (!isNaN(parsedLat) && !isNaN(parsedLon)) {
+        const existing = await Grievance.findOne({
+          status: { $in: ['Pending', 'In Progress'] },
+          category: category,
+          lat: { $exists: true },
+          lon: { $exists: true }
+        });
+
+        if (existing) {
+          const dist = haversineDistance(parsedLat, parsedLon, existing.lat, existing.lon);
+          if (dist <= 0.15) { // 150 meters proximity
+            existing.upvotes = (existing.upvotes || 0) + 1;
+            if (!existing.duplicateEmails.includes(userEmail)) {
+              existing.duplicateEmails.push(userEmail);
+            }
+            
+            // Append duplicate user notification in English as requested
+            const duplicateCountText = existing.upvotes === 1 ? '1 other citizen' : `${existing.upvotes} other citizens`;
+            existing.text = existing.text + `\n\n[Additional Report: This issue has also been reported by ${duplicateCountText}. Additional details: ${text || 'Same issue reported.'}]`;
+            
+            const saved = await existing.save();
+            return res.status(200).json(saved);
+          }
+        }
+      }
+    }
+
     // 3. Save to Database
     const newGrievance = new Grievance({
       text: text || imageDescription || 'No description provided',
@@ -444,7 +483,12 @@ app.get('/api/complaints/:id', async (req, res) => {
 // 2.6 Get complaints by User Email
 app.get('/api/complaints/user/:email', async (req, res) => {
   try {
-    const grievances = await Grievance.find({ userEmail: req.params.email }).sort({ createdAt: -1 });
+    const grievances = await Grievance.find({
+      $or: [
+        { userEmail: req.params.email },
+        { duplicateEmails: req.params.email }
+      ]
+    }).sort({ createdAt: -1 });
     res.json(grievances);
   } catch (err) {
     res.status(500).json({ error: 'Server Error' });
@@ -467,8 +511,14 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
 // 2.7 Delete complaint
 app.delete('/api/complaints/:id', async (req, res) => {
   try {
-    const deleted = await Grievance.findByIdAndDelete(req.params.id);
-    if (!deleted) return res.status(404).json({ error: 'Complaint not found' });
+    const complaint = await Grievance.findById(req.params.id);
+    if (!complaint) return res.status(404).json({ error: 'Complaint not found' });
+
+    if (complaint.status !== 'Pending') {
+      return res.status(400).json({ error: 'Cannot delete a complaint that is already being processed or resolved.' });
+    }
+
+    await Grievance.findByIdAndDelete(req.params.id);
     res.json({ message: 'Complaint deleted successfully' });
   } catch (err) {
     console.error('Delete Complaint Error:', err);
@@ -483,6 +533,10 @@ app.patch('/api/complaints/:id', async (req, res) => {
     const complaint = await Grievance.findById(req.params.id);
     if (!complaint) return res.status(404).json({ error: 'Complaint not found' });
 
+    if (complaint.status === 'Resolved') {
+      return res.status(400).json({ error: 'This complaint has already been resolved and cannot be modified.' });
+    }
+
     // Location Verification for Resolution
     if (status === 'Resolved') {
       if (!resolutionLat || !resolutionLon) {
@@ -493,12 +547,9 @@ app.patch('/api/complaints/:id', async (req, res) => {
         const distance = haversineDistance(complaint.lat, complaint.lon, resolutionLat, resolutionLon);
         console.log(`Resolution distance check: ${distance.toFixed(3)} km`);
 
-        // Threshold: 100 meters (0.1 km)
+        // Threshold: 100 meters (0.1 km) - Rejection removed per user request.
         if (distance > 0.1) {
-          return res.status(400).json({
-            error: `Resolution denied. You are too far from the original incident location (${(distance * 1000).toFixed(0)}m away). You must be within 100m to resolve the case.`,
-            distance: distance
-          });
+          console.warn(`Warning: Resolution location is ${(distance * 1000).toFixed(0)}m away. Allowed per new policy.`);
         }
       }
     }
@@ -519,8 +570,8 @@ app.patch('/api/complaints/:id', async (req, res) => {
       const rewardMap = { 'High': 50, 'Medium': 30, 'Low': 10 };
       let tokens = rewardMap[complaint.priority] || 10;
 
-      // SPECIFIC REQUIREMENT: Sewage Department gets 0 tokens.
-      if (complaint.department === 'Sewage Department') {
+      // SPECIFIC REQUIREMENT: Municipal Corporation gets 0 tokens.
+      if (complaint.department === 'Municipal Corporation') {
         tokens = 0;
       }
 
@@ -531,14 +582,30 @@ app.patch('/api/complaints/:id', async (req, res) => {
         if (fs.existsSync(usersPath)) {
           usersData = JSON.parse(fs.readFileSync(usersPath));
         }
-        const userIndex = usersData.findIndex(u => u.email === complaint.userEmail);
+        
+        // 1. Award to original reporter
+        const userIndex = usersData.findIndex(u => u.email === complaint.userEmail || u.aadhar === complaint.userEmail);
         if (userIndex !== -1) {
           usersData[userIndex].tokens = (usersData[userIndex].tokens || 0) + tokens;
         } else {
           usersData.push({ email: complaint.userEmail, tokens: tokens });
         }
+        console.log(`Awarded ${tokens} tokens to original user ${complaint.userEmail}`);
+
+        // 2. Award to all duplicate reporters!
+        if (complaint.duplicateEmails && complaint.duplicateEmails.length > 0) {
+          complaint.duplicateEmails.forEach(dupEmail => {
+            const dupIndex = usersData.findIndex(u => u.email === dupEmail || u.aadhar === dupEmail);
+            if (dupIndex !== -1) {
+              usersData[dupIndex].tokens = (usersData[dupIndex].tokens || 0) + tokens;
+            } else {
+              usersData.push({ email: dupEmail, tokens: tokens });
+            }
+            console.log(`Awarded ${tokens} duplicate-report tokens to user ${dupEmail}`);
+          });
+        }
+
         fs.writeFileSync(usersPath, JSON.stringify(usersData, null, 2));
-        console.log(`Awarded ${tokens} tokens to user ${complaint.userEmail}`);
       } catch (err) {
         console.error('Error updating user tokens:', err);
       }
@@ -573,8 +640,9 @@ app.patch('/api/complaints/:id', async (req, res) => {
 app.get('/api/user/:email/tokens', async (req, res) => {
   try {
     const usersData = JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'users.json')));
-    const user = usersData.find(u => u.email === req.params.email);
-    res.json({ tokens: user ? (user.tokens || 0) : 0 });
+    const matchingUsers = usersData.filter(u => u.email === req.params.email || u.aadhar === req.params.email);
+    const totalTokens = matchingUsers.reduce((sum, u) => sum + (u.tokens || 0), 0);
+    res.json({ tokens: totalTokens });
   } catch (err) {
     res.status(500).json({ error: 'Server Error' });
   }

@@ -2,43 +2,35 @@
   {
     "aadhar": "123456789012",
     "phone": "6267787442",
-    "tokens": 450,
-    "name": "Arjun Sharma",
-    "rank": "Elite Contributor"
+    "tokens": 0
   },
   {
     "aadhar": "987654321098",
     "phone": "9399817681",
-    "tokens": 1250,
-    "name": "Priya Verma",
-    "rank": "Nodal Sentinel"
+    "tokens": 0
   },
   {
     "aadhar": "111122223333",
     "phone": "9285366725",
-    "tokens": 75,
-    "name": "Rahul Singh",
-    "rank": "Active Citizen"
+    "tokens": 0
   },
   {
     "aadhar": "112233445566",
     "phone": "7489189731",
-    "tokens": 120,
-    "name": "Sneha Patil",
-    "rank": "Verified Reporter"
+    "tokens": 30
   },
   {
     "aadhar": "445566778899",
     "phone": "9988776655",
-    "tokens": 3200,
-    "name": "Vikram Malhotra",
-    "rank": "Infrastructure Guardian"
+    "tokens": 0
   },
   {
     "aadhar": "444444444444",
     "phone": "9770473055",
-    "tokens": 30,
-    "name": "New User",
-    "rank": "New Reporter"
+    "tokens": 30
+  },
+  {
+    "email": "112233445566",
+    "tokens": 90
   }
 ]

@@ -20,12 +20,14 @@ import {
   Check,
   Search,
   Globe,
-  Shield
+  Shield,
+  Mic,
+  MicOff
 } from 'lucide-react';
 import MapPicker from './MapPicker';
 
 const GrievanceForm = ({ userAadhar, onSuccess, onBack }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [step, setStep] = useState(1);
   const [text, setText] = useState('');
   const [location, setLocation] = useState('');
@@ -51,6 +53,26 @@ const GrievanceForm = ({ userAadhar, onSuccess, onBack }) => {
 
   const fileInputRef = useRef(null);
   const recognitionRef = useRef(null);
+  const prevLangRef = useRef(i18n.language);
+
+  // Dynamically translate text if language changes
+  useEffect(() => {
+    const translateExistingText = async () => {
+      if (text && prevLangRef.current !== i18n.language) {
+        try {
+          const transRes = await axios.get(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=${prevLangRef.current}&tl=${i18n.language}&dt=t&q=${encodeURIComponent(text)}`);
+          if (transRes.data && transRes.data[0] && transRes.data[0][0]) {
+            setText(transRes.data.map(chunk => chunk[0]).join(''));
+          }
+        } catch (e) {
+          console.error("Auto translation failed on lang change", e);
+        }
+        prevLangRef.current = i18n.language;
+      }
+    };
+    translateExistingText();
+  }, [i18n.language, text]);
+
 
   // Initialize Speech Recognition
   useEffect(() => {
@@ -272,7 +294,7 @@ const GrievanceForm = ({ userAadhar, onSuccess, onBack }) => {
           console.error("Translation failed", e);
         }
       }
-      if (desc) setText(desc);
+      if (desc) setText(prev => prev ? prev + ' ' + desc : desc);
 
       if (response.data.category) {
         const cat = response.data.category.toLowerCase();
@@ -301,9 +323,8 @@ const GrievanceForm = ({ userAadhar, onSuccess, onBack }) => {
       if (coords.lat) formData.append('lat', coords.lat);
       if (coords.lon) formData.append('lon', coords.lon);
       formData.append('department', selectedDept);
-      formData.append('userEmail', reporterEmail);
-      formData.append('reporterName', reporterName);
-      formData.append('reporterPhone', reporterPhone);
+      formData.append('userEmail', userAadhar || 'anonymous');
+
       if (image) formData.append('image', image);
       if (ward) formData.append('ward', ward);
       if (zone) formData.append('zone', zone);
@@ -333,19 +354,19 @@ const GrievanceForm = ({ userAadhar, onSuccess, onBack }) => {
           <div className="bg-gov-green/10 w-24 h-24 rounded-full flex items-center justify-center text-gov-green mx-auto mb-8">
             <Check size={48} strokeWidth={3} />
           </div>
-          <h2 className="text-3xl font-serif text-gov-navy mb-4">Grievance Registered</h2>
+          <h2 className="text-3xl font-serif text-gov-navy mb-4">{t('form.successTitle', 'Grievance Registered')}</h2>
           <p className="text-gray-600 mb-10 leading-relaxed">
-            Your grievance has been successfully submitted to the **{translateDept(selectedDept, t)}**. Our AI engine is currently processing the assignment.
+            {t('form.successDesc', 'Your grievance has been successfully submitted to the')} **{translateDept(selectedDept, t)}**. {t('form.successDesc2', 'Our AI engine is currently processing the assignment.')}
           </p>
           <div className="bg-gray-50 p-6 rounded-lg border border-gray-200 mb-10">
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Reference Tracking ID</p>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">{t('form.trackingId', 'Reference Tracking ID')}</p>
             <p className="text-3xl font-bold text-gov-navy tracking-wider">#{result._id.slice(-8).toUpperCase()}</p>
           </div>
           <button
             onClick={() => onSuccess ? onSuccess() : window.location.reload()}
             className="w-full bg-gov-navy hover:bg-gov-navy-deep text-white py-4 rounded-md font-bold text-lg transition-all shadow-lg"
           >
-            Go to Dashboard
+            {t('form.goDashboard', 'Go to Dashboard')}
           </button>
         </motion.div>
       </div>
@@ -358,19 +379,18 @@ const GrievanceForm = ({ userAadhar, onSuccess, onBack }) => {
         <div className="text-center mb-12">
           <div className="inline-flex items-center gap-2 bg-gov-navy text-white px-6 py-2 rounded-full mb-6 shadow-lg">
             <ShieldCheck className="w-5 h-5" />
-            <span className="text-sm font-bold uppercase tracking-widest">Public Grievance System</span>
+            <span className="text-sm font-bold uppercase tracking-widest">{t('form.systemName', 'Public Grievance System')}</span>
           </div>
-          <h2 className="text-4xl md:text-5xl font-serif text-gov-navy mb-4">Lodge Your Complaint</h2>
-          <p className="text-gray-600 font-medium">Please provide accurate details for effective redressal.</p>
+          <h2 className="text-4xl md:text-5xl font-serif text-gov-navy mb-4">{t('form.lodgeComplaint', 'Lodge Your Complaint')}</h2>
+          <p className="text-gray-600 font-medium">{t('form.lodgeSub', 'Please provide accurate details for effective redressal.')}</p>
         </div>
 
         {/* Professional Step Indicator */}
         <div className="flex justify-between items-center mb-16 px-4 md:px-20 relative">
           <div className="absolute top-1/2 left-0 w-full h-1 bg-gray-200 -z-0 -translate-y-1/2 hidden md:block"></div>
           {[
-            { id: 1, label: 'Incident', icon: Camera },
-            { id: 2, label: 'Location', icon: MapPin },
-            { id: 3, label: 'Identity', icon: UserCheck }
+            { id: 1, label: t('form.stepIncident', 'Incident'), icon: Camera },
+            { id: 2, label: t('form.stepLocation', 'Location'), icon: MapPin }
           ].map((s) => (
             <div key={s.id} className="relative z-10 flex flex-col items-center">
               <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all border-4 ${step >= s.id ? 'bg-gov-navy border-gov-navy text-white' : 'bg-white border-gray-200 text-gray-400'}`}>
@@ -391,7 +411,7 @@ const GrievanceForm = ({ userAadhar, onSuccess, onBack }) => {
                 <motion.div key="step1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
                   <h3 className="text-2xl font-serif text-gov-navy mb-8 border-b pb-4 flex items-center gap-3">
                     <Camera className="text-gov-saffron" />
-                    Incident Details
+                    {t('form.incidentDetails', 'Incident Details')}
                   </h3>
 
                   <div className="space-y-8">
@@ -401,8 +421,8 @@ const GrievanceForm = ({ userAadhar, onSuccess, onBack }) => {
                         className="h-64 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center bg-gray-50 hover:bg-gray-100 cursor-pointer transition-all"
                       >
                         <UploadCloud className="w-12 h-12 text-gray-400 mb-4" />
-                        <p className="font-bold text-gov-navy">Click to capture or upload photo</p>
-                        <p className="text-xs text-gray-400 mt-2">Maximum file size: 10MB (JPEG, PNG)</p>
+                        <p className="font-bold text-gov-navy">{t('form.uploadPhoto', 'Click to capture or upload photo')}</p>
+                        <p className="text-xs text-gray-400 mt-2">{t('form.maxSize', 'Maximum file size: 10MB (JPEG, PNG)')}</p>
                       </div>
                     ) : (
                       <div className="relative rounded-xl overflow-hidden shadow-lg h-80">
@@ -416,7 +436,7 @@ const GrievanceForm = ({ userAadhar, onSuccess, onBack }) => {
                         {analyzingImage && (
                           <div className="absolute inset-0 bg-gov-navy/80 flex flex-col items-center justify-center text-white backdrop-blur-sm">
                             <RefreshCw className="w-12 h-12 animate-spin text-gov-saffron mb-4" />
-                            <p className="font-bold tracking-widest text-sm uppercase">AI Analyzing Incident...</p>
+                            <p className="font-bold tracking-widest text-sm uppercase">{t('form.analyzing', 'AI Analyzing Incident...')}</p>
                           </div>
                         )}
                       </div>
@@ -424,11 +444,25 @@ const GrievanceForm = ({ userAadhar, onSuccess, onBack }) => {
                     <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={handleImageChange} />
 
                     <div>
-                      <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Problem Description</label>
+                      <div className="flex justify-between items-center mb-3">
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest">{t('form.problemDesc', 'Problem Description')}</label>
+                        <button
+                          type="button"
+                          onClick={toggleListening}
+                          className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+                            isListening 
+                              ? 'bg-red-100 text-red-600 animate-pulse border border-red-200' 
+                              : 'bg-gray-100 hover:bg-gray-200 text-gray-600 border border-gray-200 shadow-sm'
+                          }`}
+                        >
+                          {isListening ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5 text-gov-saffron animate-bounce" />}
+                          {isListening ? 'Stop Listening' : 'Speak to Write'}
+                        </button>
+                      </div>
                       <textarea
                         value={text}
                         onChange={(e) => setText(e.target.value)}
-                        placeholder="Describe the issue in detail..."
+                        placeholder={t('form.problemPlaceholder', 'Describe the issue in detail...')}
                         className="w-full p-6 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gov-navy/20 min-h-[150px] text-lg"
                       />
                     </div>
@@ -440,7 +474,7 @@ const GrievanceForm = ({ userAadhar, onSuccess, onBack }) => {
                       disabled={!image && !text}
                       className="bg-gov-navy hover:bg-gov-navy-deep text-white px-10 py-4 rounded-md font-bold flex items-center gap-3 transition-all disabled:opacity-50 shadow-lg"
                     >
-                      Next: Location
+                      {t('form.nextLocation', 'Next: Location')}
                       <ArrowRight className="w-5 h-5" />
                     </button>
                   </div>
@@ -451,7 +485,7 @@ const GrievanceForm = ({ userAadhar, onSuccess, onBack }) => {
                 <motion.div key="step2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
                   <h3 className="text-2xl font-serif text-gov-navy mb-8 border-b pb-4 flex items-center gap-3">
                     <MapPin className="text-gov-saffron" />
-                    Location Details
+                    {t('form.locationDetails', 'Location Details')}
                   </h3>
 
                   <div className="space-y-8">
@@ -461,7 +495,7 @@ const GrievanceForm = ({ userAadhar, onSuccess, onBack }) => {
                         <input
                           value={location}
                           onChange={(e) => setLocation(e.target.value)}
-                          placeholder="Search or enter location address..."
+                          placeholder={t('form.locationPlaceholder', 'Search or enter location address...')}
                           className="w-full pl-12 pr-4 py-4 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gov-navy/20 font-bold"
                         />
                       </div>
@@ -481,7 +515,7 @@ const GrievanceForm = ({ userAadhar, onSuccess, onBack }) => {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-end">
                       <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Target Department</label>
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">{t('form.targetDept', 'Target Department')}</label>
                         <div className="relative">
                           <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 text-gov-saffron w-5 h-5 z-10" />
                           <select
@@ -495,7 +529,7 @@ const GrievanceForm = ({ userAadhar, onSuccess, onBack }) => {
                       </div>
                       <div className="bg-gov-saffron/10 p-5 rounded-lg border border-gov-saffron/20 flex gap-4">
                         <Info className="w-6 h-6 text-gov-saffron shrink-0" />
-                        <p className="text-sm text-gov-navy leading-relaxed font-medium">AI has automatically identified the most suitable department for this grievance.</p>
+                        <p className="text-sm text-gov-navy leading-relaxed font-medium">{t('form.aiDeptMsg', 'AI has automatically identified the most suitable department for this grievance.')}</p>
                       </div>
                     </div>
 
@@ -503,7 +537,7 @@ const GrievanceForm = ({ userAadhar, onSuccess, onBack }) => {
                       <div className="mt-8 p-5 bg-green-50 rounded-xl border border-green-100 shadow-sm">
                         <div className="flex justify-between items-center mb-4">
                            <p className="text-xs text-gov-green font-bold flex items-center gap-2 m-0 uppercase tracking-widest">
-                              <ShieldCheck className="w-4 h-4" /> LOCATION SYNCED
+                              <ShieldCheck className="w-4 h-4" /> {t('form.locationSynced', 'LOCATION SYNCED')}
                            </p>
                            <span className="text-[10px] font-bold text-gov-green opacity-80">{coords.lat.toFixed(4)}, {coords.lon.toFixed(4)}</span>
                         </div>
@@ -513,13 +547,13 @@ const GrievanceForm = ({ userAadhar, onSuccess, onBack }) => {
                             <MapPin className="w-4 h-4" />
                           </div>
                           <div className="flex-1">
-                            <p className="text-[10px] font-bold text-gray-500 m-0 uppercase tracking-widest">Routing to Office</p>
+                            <p className="text-[10px] font-bold text-gray-500 m-0 uppercase tracking-widest">{t('form.routingTo', 'Routing to Office')}</p>
                             <input 
                               type="text" 
                               value={ward || ''} 
                               onChange={(e) => setWard(e.target.value)}
                               className="text-sm font-bold text-gov-navy border-none bg-transparent w-full outline-none p-0 focus:ring-0"
-                              placeholder="Enter Ward/Area"
+                              placeholder={t('form.wardPlaceholder', 'Enter Ward/Area')}
                             />
                           </div>
                           <button onClick={() => setIsManualInput(true)} className="p-2 hover:bg-gray-100 rounded-md transition-all">
@@ -527,7 +561,7 @@ const GrievanceForm = ({ userAadhar, onSuccess, onBack }) => {
                           </button>
                         </div>
                         <p className="text-[10px] text-gray-500 mt-3 italic font-bold">
-                          * This complaint will be assigned to the <strong className="text-gov-navy">{ward || 'local'}</strong> department office.
+                          * {t('form.assignedTo', 'This complaint will be assigned to the')} <strong className="text-gov-navy">{ward || 'local'}</strong> {t('form.deptOffice', 'department office.')}
                         </p>
                       </div>
                     )}
@@ -535,78 +569,15 @@ const GrievanceForm = ({ userAadhar, onSuccess, onBack }) => {
 
                   <div className="flex justify-between mt-12 pt-8 border-t">
                     <button onClick={prevStep} className="flex items-center gap-2 font-bold text-gov-navy hover:text-gov-navy-deep">
-                      <ArrowLeft className="w-5 h-5" /> Back
-                    </button>
-                    <button
-                      onClick={nextStep}
-                      className="bg-gov-navy hover:bg-gov-navy-deep text-white px-10 py-4 rounded-md font-bold flex items-center gap-3 transition-all shadow-lg"
-                    >
-                      Next: Identification
-                      <ArrowRight className="w-5 h-5" />
-                    </button>
-                  </div>
-                </motion.div>
-              )}
-
-              {step === 3 && (
-                <motion.div key="step3" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-                  <h3 className="text-2xl font-serif text-gov-navy mb-8 border-b pb-4 flex items-center gap-3">
-                    <UserCheck className="text-gov-saffron" />
-                    {t('common.reporterInfo', 'Reporter Identity')}
-                  </h3>
-
-                  <div className="bg-gray-50 p-8 md:p-12 rounded-xl border border-gray-100 space-y-8">
-                    <div>
-                      <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">{t('common.fullName', 'Full Name')}</label>
-                      <input
-                        value={reporterName}
-                        onChange={(e) => setReporterName(e.target.value)}
-                        placeholder={t('common.namePlaceholder', 'Your legal name')}
-                        className="w-full p-4 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gov-navy/20 font-bold"
-                      />
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                      <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">{t('auth.emailAddress', 'Email Address (for Rewards)')}</label>
-                        <input
-                          type="email"
-                          value={reporterEmail}
-                          onChange={(e) => setReporterEmail(e.target.value)}
-                          placeholder="your.email@example.com"
-                          className="w-full p-4 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gov-navy/20 font-mono font-bold"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">{t('common.mobileNumber', 'Mobile Number')}</label>
-                        <input
-                          maxLength="10"
-                          value={reporterPhone}
-                          onChange={(e) => setReporterPhone(e.target.value.replace(/\D/g, ''))}
-                          placeholder="91XXXXXXXX"
-                          className="w-full p-4 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gov-navy/20 font-bold"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mt-10 flex gap-4 p-6 bg-red-50 rounded-lg border border-red-100">
-                    <Shield className="w-6 h-6 text-red-400 shrink-0" />
-                    <p className="text-sm text-red-800 leading-relaxed">
-                      {t('form.ipcSection', 'All grievances are recorded under IPC Section 182. Submitting false information or spam complaints is a punishable offense under government regulations.')}
-                    </p>
-                  </div>
-
-                  <div className="flex justify-between mt-12 pt-8 border-t">
-                    <button onClick={prevStep} className="flex items-center gap-2 font-bold text-gov-navy hover:text-gov-navy-deep">
-                      <ArrowLeft className="w-5 h-5" /> Back
+                      <ArrowLeft className="w-5 h-5" /> {t('form.back', 'Back')}
                     </button>
                     <button
                       onClick={handleSubmit}
-                      disabled={loading || !reporterName || !reporterEmail.includes('@')}
+                      disabled={loading || (!image && !text)}
                       className="bg-gov-navy hover:bg-gov-navy-deep text-white px-12 py-4 rounded-md font-bold text-lg flex items-center gap-4 transition-all disabled:opacity-50 shadow-2xl"
                     >
                       {loading ? <RefreshCw className="w-6 h-6 animate-spin" /> : <Send className="w-6 h-6" />}
-                      {loading ? "Registering..." : "Submit Grievance"}
+                      {loading ? t('form.registering', "Registering...") : t('form.submitBtn', "Submit Grievance")}
                     </button>
                   </div>
                 </motion.div>

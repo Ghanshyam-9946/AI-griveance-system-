@@ -27,7 +27,8 @@ import {
   Shield,
   FileText,
   User,
-  ArrowRight
+  ArrowRight,
+  Award
 } from 'lucide-react';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -202,8 +203,8 @@ const Dashboard = ({ user }) => {
     // ✅ CASE 2: Specific Department Officers (Road, Sewage, Water, Waste, Electric)
     //    → They see ALL complaints assigned to their department (city-wide, no ward filter)
     const specificDepts = ['Road Department', 'Sewage Department', 'Waste Department', 'Water Department', 'Electric Department'];
-    if (userDepartment && specificDepts.includes(userDepartment)) {
-      return c.department === userDepartment;
+    if (userDepartment && specificDepts.map(d => d.trim()).includes(userDepartment.trim())) {
+      return c.department.trim() === userDepartment.trim();
     }
 
     // ✅ CASE 3: Ward-level Municipal Corporation officers
@@ -242,7 +243,7 @@ const Dashboard = ({ user }) => {
     return statusFilter === 'All' || (statusFilter === 'High' ? c.priority === 'High' : c.status === statusFilter);
   });
 
-  const isMunicipalAdmin = !userDepartment || userDepartment === 'Municipal Corporation';
+  const isMunicipalAdmin = !userDepartment || userDepartment.trim() === 'Municipal Corporation';
 
   const getDeptStats = (deptName) => {
     const deptComplaints = complaints.filter(c => c.department === deptName);
@@ -266,6 +267,17 @@ const Dashboard = ({ user }) => {
     }
   };
 
+  const calculateDistance = (lat1, lon1, lat2, lon2) => {
+    if(!lat1 || !lon1 || !lat2 || !lon2) return 0;
+    const R = 6371; 
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+  };
+
   if (loading && complaints.length === 0) return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6">
       <RefreshCw className="w-16 h-16 animate-spin text-gov-navy mb-6" />
@@ -280,36 +292,42 @@ const Dashboard = ({ user }) => {
         <div className="p-8 border-b border-white/10">
           <div className="flex items-center gap-3 mb-6">
             <ShieldCheck className="w-8 h-8 text-gov-saffron" />
-            <h1 className="text-xl font-serif font-bold tracking-tight">Admin Portal</h1>
+            <h1 className="text-xl font-serif font-bold tracking-tight">
+              {isMunicipalAdmin ? 'Admin Portal' : `${getDeptName(userDepartment).split(' ')[0]} Portal`}
+            </h1>
           </div>
           <div className="flex items-center gap-3 p-3 bg-white/5 rounded-lg border border-white/10">
             <div className="w-10 h-10 rounded-full bg-gov-saffron flex items-center justify-center text-gov-navy font-bold">
-              {user?.fullName?.[0] || 'A'}
+              {user?.fullName?.[0] || 'O'}
             </div>
             <div className="overflow-hidden">
-              <p className="text-xs font-bold truncate">{user?.fullName || 'Administrator'}</p>
-              <p className="text-[10px] opacity-60 truncate uppercase tracking-tighter">{userDepartment || 'Master Control'}</p>
+              <p className="text-xs font-bold truncate">{user?.fullName || 'Officer'}</p>
+              <p className="text-[10px] opacity-60 truncate uppercase tracking-tighter text-gov-saffron font-black">
+                {userDepartment || 'Master Control'}
+              </p>
             </div>
           </div>
         </div>
 
         <nav className="p-6 space-y-2 flex-grow">
-          <button className="w-full flex items-center gap-4 p-4 rounded-md bg-white/10 text-gov-saffron font-bold transition-all">
+          <button className="w-full flex items-center gap-4 p-4 rounded-md bg-white/10 text-gov-saffron font-bold transition-all text-xs uppercase tracking-widest">
             <LayoutDashboard className="w-5 h-5" />
-            Control Center
+            {t('admin.controlCenter')}
           </button>
-          <button onClick={() => setPerfModalOpen(true)} className="w-full flex items-center gap-4 p-4 rounded-md hover:bg-white/5 text-gray-400 hover:text-white transition-all">
-            <BarChart3 className="w-5 h-5" />
-            Performance
-          </button>
-          <button className="w-full flex items-center gap-4 p-4 rounded-md hover:bg-white/5 text-gray-400 hover:text-white transition-all">
+          {isMunicipalAdmin && (
+            <button onClick={() => setPerfModalOpen(true)} className="w-full flex items-center gap-4 p-4 rounded-md hover:bg-white/5 text-gray-400 hover:text-white transition-all text-xs uppercase tracking-widest">
+              <BarChart3 className="w-5 h-5" />
+              {t('admin.performance')}
+            </button>
+          )}
+          <button className="w-full flex items-center gap-4 p-4 rounded-md hover:bg-white/5 text-gray-400 hover:text-white transition-all text-xs uppercase tracking-widest">
             <FileText className="w-5 h-5" />
-            Official Logs
+            {t('admin.officialLogs')}
           </button>
         </nav>
 
         <div className="p-6 border-t border-white/10">
-          <div className="text-[10px] text-white/30 uppercase tracking-[0.2em] font-bold mb-4 px-4">System Status</div>
+          <div className="text-[10px] text-white/30 uppercase tracking-[0.2em] font-bold mb-4 px-4">{t('admin.systemStatus')}</div>
           <div className="space-y-3 px-4">
             <div className="flex items-center justify-between">
               <span className="text-xs opacity-60">AI Core</span>
@@ -333,11 +351,11 @@ const Dashboard = ({ user }) => {
             </div>
             <div>
               <h2 className="text-2xl font-serif text-gov-navy font-bold">
-                {userDepartment ? getDeptName(userDepartment) : 'National Master Control'}
+                {userDepartment ? `${translateDept(userDepartment, t)} ${t('nav.dashboard')}` : `${t('admin.masterControl')} ${t('nav.dashboard')}`}
               </h2>
               <p className="text-xs text-gray-500 font-bold uppercase tracking-widest flex items-center gap-2">
-                <MapPin className="w-3 h-3" />
-                {userWard || 'All Jurisdictions'} | Control Frequency ACTIVE
+                <MapPin className="w-3 h-3 text-gov-saffron" />
+                {userWard ? `${t('admin.jurisdiction')}: ${userWard}` : t('admin.activeJurisdictions')} | {t('admin.operationalStatus')} ACTIVE
               </p>
             </div>
           </div>
@@ -348,24 +366,67 @@ const Dashboard = ({ user }) => {
               className="flex items-center gap-2 text-gov-navy hover:text-gov-navy-deep font-bold text-xs uppercase tracking-widest bg-gray-50 px-4 py-2 rounded-md border border-gray-200 transition-all"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              Sync Data
+              {t('admin.syncData')}
             </button>
             <div className="h-8 w-px bg-gray-200 hidden md:block"></div>
             <div className="hidden md:flex flex-col items-end">
-              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">Current Load</span>
-              <span className="text-sm font-bold text-gov-navy">{filteredComplaints.length} Active Cases</span>
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">{t('admin.currentLoad')}</span>
+              <span className="text-sm font-bold text-gov-navy">{filteredComplaints.length} {t('admin.activeCases')}</span>
             </div>
           </div>
         </header>
 
-        <div className="p-8 space-y-10 max-w-7xl mx-auto">
+         <div className="p-8 space-y-10 max-w-7xl mx-auto">
+          {/* Departmental Identity Banner */}
+          {!isMunicipalAdmin ? (
+            <motion.div 
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="bg-gov-navy text-white p-8 rounded-2xl shadow-xl border-l-8 border-gov-saffron flex items-center justify-between"
+            >
+              <div>
+                <p className="text-gov-saffron text-xs font-bold uppercase tracking-[0.3em] mb-2">{t('admin.currentDept')}</p>
+                <h3 className="text-4xl font-serif font-bold">{translateDept(userDepartment, t)}</h3>
+                <p className="text-gray-400 mt-2 font-medium">{t('admin.selectJurisdiction')}</p>
+              </div>
+              <div className="flex items-center gap-8">
+                <div className="hidden md:flex flex-col items-end bg-white/10 px-6 py-4 rounded-xl border border-white/20">
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 flex items-center gap-2">
+                    <Award className="w-4 h-4 text-gov-saffron" />
+                    Department Credits
+                  </span>
+                  <span className="text-3xl font-bold text-gov-saffron">
+                    {deptTokens.find(d => d.name === userDepartment)?.tokens || 0}
+                  </span>
+                </div>
+                <div className="hidden lg:block">
+                  <Building2 className="w-20 h-20 opacity-20 text-gov-saffron" />
+                </div>
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div 
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex items-center gap-4"
+            >
+              <div className="p-3 bg-gov-navy text-gov-saffron rounded-lg">
+                <ShieldCheck className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">{t('admin.officialPortal')}</p>
+                <p className="text-lg font-bold text-gov-navy">{t('admin.masterControl')} {t('admin.panel')}</p>
+              </div>
+            </motion.div>
+          )}
+
           {/* Dashboard Stats Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {[
-              { label: 'Pending Redressal', count: deptFilteredComplaints.filter(c => c.status === 'Pending').length, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-50', filter: 'Pending' },
-              { label: 'In Operation', count: deptFilteredComplaints.filter(c => c.status === 'In Progress').length, icon: RefreshCw, color: 'text-blue-500', bg: 'bg-blue-50', filter: 'In Progress' },
-              { label: 'Resolved Cases', count: deptFilteredComplaints.filter(c => c.status === 'Resolved').length, icon: CheckCircle2, color: 'text-gov-green', bg: 'bg-green-50', filter: 'Resolved' },
-              { label: 'High Priority', count: deptFilteredComplaints.filter(c => c.priority === 'High').length, icon: ShieldAlert, color: 'text-red-500', bg: 'bg-red-50', filter: 'High' }
+              { label: t('admin.pendingRedressal'), count: deptFilteredComplaints.filter(c => c.status === 'Pending').length, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-50', filter: 'Pending' },
+              { label: t('admin.inOperation'), count: deptFilteredComplaints.filter(c => c.status === 'In Progress').length, icon: RefreshCw, color: 'text-blue-500', bg: 'bg-blue-50', filter: 'In Progress' },
+              { label: t('admin.resolvedCases'), count: deptFilteredComplaints.filter(c => c.status === 'Resolved').length, icon: CheckCircle2, color: 'text-gov-green', bg: 'bg-green-50', filter: 'Resolved' },
+              { label: t('admin.highPriority'), count: deptFilteredComplaints.filter(c => c.priority === 'High').length, icon: ShieldAlert, color: 'text-red-500', bg: 'bg-red-50', filter: 'High' }
             ].map((stat, idx) => (
               <motion.div
                 key={idx}
@@ -392,10 +453,10 @@ const Dashboard = ({ user }) => {
                   <BrainCircuit className="w-8 h-8" />
                 </div>
                 <div>
-                  <h3 className="text-2xl font-serif text-gov-navy font-bold">Grievance Intelligent Queue</h3>
+                  <h3 className="text-2xl font-serif text-gov-navy font-bold">{t('admin.intelligenceHeader')}</h3>
                   <p className="text-xs text-gray-400 font-bold uppercase tracking-widest flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-gov-green animate-pulse"></span>
-                    AI Sorting Active & Real-time Verifying
+                    {t('admin.aiSorting')}
                   </p>
                 </div>
               </div>
@@ -409,14 +470,14 @@ const Dashboard = ({ user }) => {
                       onChange={(e) => setSelectedDeptFilter(e.target.value)}
                       className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-md focus:ring-2 focus:ring-gov-navy/20 outline-none font-bold text-xs uppercase text-gov-navy"
                     >
-                      <option value="All">All Departments</option>
+                      <option value="All">{t('admin.allDepts')}</option>
                       {departments.map(dept => <option key={dept} value={dept}>{translateDept(dept, t)}</option>)}
                     </select>
                   </div>
                 )}
                 <div className="relative w-full md:w-64">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <input placeholder="Search Reference ID..." className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-md focus:ring-2 focus:ring-gov-navy/20 outline-none text-xs font-bold" />
+                  <input placeholder={t('admin.searchPlaceholder')} className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-md focus:ring-2 focus:ring-gov-navy/20 outline-none text-xs font-bold" />
                 </div>
               </div>
             </div>
@@ -425,11 +486,11 @@ const Dashboard = ({ user }) => {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-100">
-                    <th className="p-6 text-[10px] font-bold text-gray-500 uppercase tracking-widest">Reference & Incident</th>
-                    <th className="p-6 text-[10px] font-bold text-gray-500 uppercase tracking-widest">Intelligence Analysis</th>
-                    <th className="p-6 text-[10px] font-bold text-gray-500 uppercase tracking-widest">Jurisdiction</th>
-                    <th className="p-6 text-[10px] font-bold text-gray-500 uppercase tracking-widest">Operational Status</th>
-                    <th className="p-6 text-[10px] font-bold text-gray-500 uppercase tracking-widest">Redressal</th>
+                    <th className="p-6 text-[10px] font-bold text-gray-500 uppercase tracking-widest">{t('admin.refIncident')}</th>
+                    <th className="p-6 text-[10px] font-bold text-gray-500 uppercase tracking-widest">{t('admin.intelligenceAnalysis')}</th>
+                    <th className="p-6 text-[10px] font-bold text-gray-500 uppercase tracking-widest">{t('admin.jurisdiction')}</th>
+                    <th className="p-6 text-[10px] font-bold text-gray-500 uppercase tracking-widest">{t('admin.operationalStatus')}</th>
+                    <th className="p-6 text-[10px] font-bold text-gray-500 uppercase tracking-widest">{t('admin.redressal')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
@@ -438,17 +499,26 @@ const Dashboard = ({ user }) => {
                       <td colSpan="5" className="p-20 text-center">
                         <div className="flex flex-col items-center gap-4 text-gray-400">
                           <CheckCircle2 className="w-16 h-16 opacity-20" />
-                          <p className="font-bold uppercase tracking-widest">All Grievances Cleared For This Filter</p>
+                          <p className="font-bold uppercase tracking-widest">{t('admin.allCleared')}</p>
                         </div>
                       </td>
                     </tr>
                   ) : (
-                    filteredComplaints.map((c) => (
-                      <tr key={c._id} className="hover:bg-gray-50/50 transition-all group">
+                    filteredComplaints.map((c) => {
+                      const distance = c.status === 'Resolved' ? calculateDistance(c.lat, c.lon, c.resolutionLat, c.resolutionLon) : 0;
+                      const hasFraudWarning = c.status === 'Resolved' && (c.isAiGenerated || c.isMatch === false || distance > 0.1);
+                      
+                      return (
+                      <tr key={c._id} className={`transition-all group ${hasFraudWarning && isMunicipalAdmin ? 'bg-red-50/30 hover:bg-red-50/50' : 'hover:bg-gray-50/50'}`}>
                         <td className="p-6">
                           <div className="flex items-start gap-4">
-                            <div className={`p-2 rounded font-mono text-[10px] font-bold ${c.priority === 'High' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-gov-navy/5 text-gov-navy border border-gov-navy/10'}`}>
-                              #{c._id.slice(-8).toUpperCase()}
+                            <div className={`p-2 rounded font-mono text-[10px] font-bold flex items-center gap-1.5 ${c.priority === 'High' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-gov-navy/5 text-gov-navy border border-gov-navy/10'}`}>
+                              <span>#{c._id.slice(-8).toUpperCase()}</span>
+                              {c.upvotes > 0 && (
+                                <span className="px-1.5 py-0.5 rounded bg-gov-saffron text-gov-navy text-[9px] font-black uppercase tracking-widest animate-pulse shadow-sm">
+                                  +{c.upvotes}
+                                </span>
+                              )}
                             </div>
                             <div className="max-w-xs">
                               <p className="text-sm font-bold text-gov-navy line-clamp-2 leading-snug">{c.text}</p>
@@ -484,25 +554,25 @@ const Dashboard = ({ user }) => {
                           <select 
                             value={c.status}
                             onChange={(e) => handleStatusChange(c._id, e.target.value)}
-                            disabled={isMunicipalAdmin}
+                            disabled={isMunicipalAdmin || c.status === 'Resolved'}
                             className={`px-3 py-2 rounded-md text-[10px] font-bold uppercase tracking-widest border transition-all appearance-none cursor-pointer focus:ring-4 focus:ring-opacity-20 ${
                               c.status === 'Pending' ? 'bg-amber-50 text-amber-600 border-amber-200 focus:ring-amber-200' :
                               c.status === 'In Progress' ? 'bg-blue-50 text-blue-600 border-blue-200 focus:ring-blue-200' :
                               'bg-green-50 text-gov-green border-green-200 focus:ring-green-200'
                             }`}
                           >
-                            <option value="Pending">Pending</option>
-                            <option value="In Progress">In Progress</option>
-                            <option value="Resolved">Resolved</option>
+                            <option value="Pending">{t('admin.pending')}</option>
+                            <option value="In Progress">{t('admin.inProgress')}</option>
+                            <option value="Resolved">{t('admin.resolved')}</option>
                           </select>
                         </td>
                         <td className="p-6">
                           <div className="flex items-center gap-3">
                             {c.imageUrl && (
                               <button 
-                                onClick={() => setViewImageModal({ open: true, image: c.imageUrl, title: 'Reported Evidence', isAi: false })}
+                                onClick={() => setViewImageModal({ open: true, image: c.imageUrl, title: t('admin.reportedEvidence'), isAi: false })}
                                 className="p-2 bg-gray-50 border border-gray-200 rounded-md hover:bg-white hover:border-gov-navy text-gov-navy transition-all shadow-sm"
-                                title="View Reported Photo"
+                                title={t('admin.viewPhoto')}
                               >
                                 <Camera className="w-5 h-5" />
                               </button>
@@ -513,14 +583,14 @@ const Dashboard = ({ user }) => {
                                   open: true,
                                   image: c.resolutionImage,
                                   originalImage: c.imageUrl,
-                                  title: 'Resolution Verification',
+                                  title: t('admin.resolutionVerification'),
                                   isAi: c.isAiGenerated,
                                   aiConfidence: c.aiDetectionConfidence,
                                   similarity: c.similarityScore,
                                   isMatch: c.isMatch
                                 })}
                                 className="p-2 bg-gov-green text-white rounded-md hover:bg-green-600 transition-all shadow-md"
-                                title="Verify Resolution Proof"
+                                title={t('admin.verifyProof')}
                               >
                                 <CheckCircle2 className="w-5 h-5" />
                               </button>
@@ -529,15 +599,24 @@ const Dashboard = ({ user }) => {
                               <button
                                 onClick={() => setEditCoordsModal({ open: true, complaintId: c._id, lat: c.lat || '', lon: c.lon || '' })}
                                 className="p-2 bg-gray-50 border border-gray-200 rounded-md hover:bg-white hover:border-gov-navy text-gov-navy transition-all shadow-sm"
-                                title="Edit Coordinates"
+                                title={t('admin.editCoords')}
                               >
                                 <MapPin className="w-5 h-5" />
                               </button>
                             )}
+                            {isMunicipalAdmin && hasFraudWarning && (
+                              <div 
+                                className="p-2 bg-red-100 border border-red-200 rounded-md text-red-600 shadow-sm flex items-center justify-center animate-pulse"
+                                title={`Warning: AI/GPS Discrepancy Detected.\nAI Manipulated: ${c.isAiGenerated}\nImage Match: ${c.isMatch}\nGPS Distance: ${(distance * 1000).toFixed(0)}m`}
+                              >
+                                <AlertTriangle className="w-5 h-5" />
+                              </div>
+                            )}
                           </div>
                         </td>
                       </tr>
-                    ))
+                    );
+                  })
                   )}
                 </tbody>
               </table>
@@ -553,80 +632,116 @@ const Dashboard = ({ user }) => {
             <motion.div 
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              className="bg-white max-w-2xl w-full rounded-2xl shadow-2xl overflow-hidden border-t-8 border-gov-green"
+              className="bg-white max-w-2xl w-full rounded-2xl shadow-2xl overflow-hidden border-t-8 border-gov-green flex flex-col max-h-[95vh]"
             >
-              <div className="p-8 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+              <div className="p-8 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
                 <div>
-                  <h3 className="text-2xl font-serif text-gov-navy font-bold">Verification Protocol</h3>
-                  <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mt-1">Grievance Resolution Verification</p>
+                  <h2 className="text-2xl font-serif font-bold text-gov-navy">{t('admin.resolutionVerification')}</h2>
+                  <p className="text-gray-500 text-sm font-medium">{t('admin.resolutionSub')}</p>
                 </div>
-                <button onClick={() => setResolutionModal({ open: false, complaintId: null })} className="p-2 hover:bg-gray-200 rounded-full transition-all">
+                <button 
+                  onClick={() => setResolutionModal({ open: false, complaintId: null })}
+                  className="p-2 hover:bg-gray-200 rounded-full transition-colors"
+                >
                   <X className="w-6 h-6 text-gray-400" />
                 </button>
               </div>
 
-              <div className="p-10 space-y-8">
-                <div className="bg-blue-50 p-6 rounded-xl border border-blue-100 flex gap-4">
-                  <ShieldCheck className="w-6 h-6 text-gov-navy shrink-0 mt-1" />
-                  <p className="text-sm text-gov-navy leading-relaxed font-medium">
-                    Please capture or upload a clear photo of the resolved incident. Our AI core will perform image triangulation and meta-data verification.
+              <div className="p-8 overflow-y-auto custom-scrollbar flex-grow">
+                {/* AI Trust Message */}
+                <div className="mb-8 p-4 bg-blue-50 border border-blue-100 rounded-xl flex gap-4 items-start">
+                  <div className="p-2 bg-white rounded-lg shadow-sm">
+                    <ShieldCheck className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <p className="text-blue-800 text-sm font-medium leading-relaxed">
+                    {t('admin.aiGpsVerification')}
                   </p>
                 </div>
 
+                {/* Upload Zone */}
                 {!photoPreview ? (
-                  <div 
-                    onClick={() => document.getElementById('res-upload').click()}
-                    className="h-72 border-4 border-dashed border-gray-200 rounded-2xl flex flex-col items-center justify-center bg-gray-50 hover:bg-gray-100 cursor-pointer transition-all group"
-                  >
-                    <input id="res-upload" type="file" accept="image/*" onChange={handlePhotoCapture} className="hidden" />
-                    <div className="bg-gov-navy w-16 h-16 rounded-full flex items-center justify-center text-gov-saffron mb-4 group-hover:scale-110 transition-transform shadow-lg">
-                      <Camera className="w-8 h-8" />
+                  <label className="group relative block w-full aspect-video border-2 border-dashed border-gray-200 rounded-2xl hover:border-gov-green transition-all cursor-pointer bg-gray-50/50">
+                    <input 
+                      type="file" 
+                      className="hidden" 
+                      accept="image/*"
+                      onChange={handlePhotoCapture}
+                    />
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
+                      <div className="p-5 bg-white rounded-2xl shadow-xl group-hover:scale-110 transition-transform">
+                        <Camera className="w-10 h-10 text-gov-navy" />
+                      </div>
+                      <div className="text-center">
+                        <p className="font-bold text-gov-navy text-lg">{t('admin.clickToUpload')}</p>
+                        <p className="text-gray-400 text-sm font-medium mt-1">{t('admin.gpsAiCheck')}</p>
+                      </div>
                     </div>
-                    <p className="font-bold text-gov-navy">Optical Proof Collection</p>
-                    <p className="text-xs text-gray-400 mt-2">Maximum file size: 10MB (JPEG, PNG)</p>
-                  </div>
+                  </label>
                 ) : (
                   <div className="space-y-6">
-                    <div className="relative rounded-2xl overflow-hidden shadow-2xl border-4 border-white h-80">
-                      <img src={photoPreview} className="w-full h-full object-cover" alt="Resolution" />
-                      {aiDetection.loading && (
-                        <div className="absolute inset-0 bg-gov-navy/80 flex flex-col items-center justify-center text-white backdrop-blur-sm">
-                          <RefreshCw className="w-12 h-12 animate-spin text-gov-saffron mb-4" />
-                          <p className="font-bold tracking-widest text-sm uppercase">AI Telemetry Running...</p>
-                        </div>
-                      )}
+                    <div className="relative aspect-video rounded-2xl overflow-hidden shadow-2xl border-4 border-white">
+                      <img src={photoPreview} alt="Resolution" className="w-full h-full object-cover" />
+                      <button 
+                        onClick={() => setPhotoPreview(null)}
+                        className="absolute top-4 right-4 p-2 bg-black/60 text-white rounded-full hover:bg-black transition-colors backdrop-blur-md"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
                     </div>
 
+                    {/* Verification Grid */}
                     <div className="grid grid-cols-2 gap-4">
-                      <div className={`p-4 rounded-lg border flex flex-col items-center gap-2 ${aiDetection.checked ? (aiDetection.isAi ? 'bg-red-50 border-red-100 text-red-600' : 'bg-green-50 border-green-100 text-gov-green') : 'bg-gray-50 border-gray-200 opacity-50'}`}>
-                        <Shield className="w-5 h-5" />
-                        <span className="text-[10px] font-bold uppercase tracking-widest">Integrity Check</span>
-                        <span className="text-sm font-bold uppercase">{aiDetection.checked ? (aiDetection.isAi ? 'Manipulated' : 'Authentic') : 'Pending'}</span>
+                      <div className={`p-6 rounded-2xl border transition-all ${!aiDetection.isAi ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'}`}>
+                        <div className="flex flex-col items-center gap-2">
+                          <div className={`p-2 rounded-lg ${!aiDetection.isAi ? 'text-green-600' : 'text-red-600'}`}>
+                            <ShieldCheck className="w-6 h-6" />
+                          </div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">{t('admin.aiIntegrity')}</p>
+                          <span className={`text-sm font-bold uppercase ${!aiDetection.isAi ? 'text-green-700' : 'text-red-700'}`}>
+                            {aiDetection.loading ? t('admin.verifyingStatus') : (!aiDetection.isAi ? t('admin.authentic') : t('admin.manipulated'))}
+                          </span>
+                        </div>
                       </div>
-                      <div className={`p-4 rounded-lg border flex flex-col items-center gap-2 ${similarity.checked ? (similarity.isMatch ? 'bg-green-50 border-green-100 text-gov-green' : 'bg-red-50 border-red-100 text-red-600') : 'bg-gray-50 border-gray-200 opacity-50'}`}>
-                        <Zap className="w-5 h-5" />
-                        <span className="text-[10px] font-bold uppercase tracking-widest">Pattern Match</span>
-                        <span className="text-sm font-bold uppercase">{similarity.checked ? `${(similarity.score * 100).toFixed(0)}% Match` : 'Pending'}</span>
+
+                      <div className={`p-6 rounded-2xl border transition-all ${
+                        !similarity.checked ? 'bg-gray-50 border-gray-100' : 
+                        similarity.isMatch ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'
+                      }`}>
+                        <div className="flex flex-col items-center gap-2">
+                          <div className={`p-2 rounded-lg ${
+                            !similarity.checked ? 'text-gray-400' : 
+                            similarity.isMatch ? 'text-green-600' : 'text-red-600'
+                          }`}>
+                            <Zap className="w-6 h-6" />
+                          </div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">{t('admin.incidentMatch')}</p>
+                          <span className={`text-sm font-bold uppercase ${
+                            !similarity.checked ? 'text-gray-500' : 
+                            similarity.isMatch ? 'text-green-700' : 'text-red-700'
+                          }`}>
+                            {similarity.checked ? `${Math.min(100, similarity.score).toFixed(0)}% ${t('admin.matchScore')}` : t('admin.verifyingStatus')}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
                 )}
               </div>
 
-              <div className="p-8 bg-gray-50 border-t border-gray-100 flex gap-4">
+              <div className="p-8 bg-gray-50 border-t border-gray-100 flex gap-4 mt-auto">
                 <button 
                   onClick={() => setResolutionModal({ open: false, complaintId: null })} 
-                  className="flex-1 px-6 py-4 rounded-md font-bold text-gray-500 hover:bg-gray-200 transition-all uppercase tracking-widest text-xs"
+                  className="flex-1 px-6 py-4 rounded-xl font-bold text-gray-500 hover:bg-gray-200 transition-all uppercase tracking-widest text-xs border border-gray-200"
                 >
-                  Abort Protocol
+                  {t('admin.cancel')}
                 </button>
                 <button 
                   onClick={submitResolution}
                   disabled={!photoPreview || aiDetection.loading}
-                  className="flex-[2] bg-gov-green hover:bg-green-600 text-white py-4 rounded-md font-bold text-lg flex items-center justify-center gap-3 shadow-lg disabled:opacity-50 transition-all uppercase tracking-widest"
+                  className="flex-[2] bg-gov-green hover:bg-green-600 text-white py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-3 shadow-lg disabled:opacity-50 transition-all uppercase tracking-widest"
                 >
                   {aiDetection.loading ? <RefreshCw className="w-6 h-6 animate-spin" /> : <ShieldCheck className="w-6 h-6" />}
-                  Verify & Finalize
+                  {t('admin.confirmResolution')}
                 </button>
               </div>
             </motion.div>
@@ -649,29 +764,29 @@ const Dashboard = ({ user }) => {
                 <div style={{ display: 'grid', gridTemplateColumns: viewImageModal.originalImage ? '1fr 1fr' : '1fr', gap: '1.5rem' }}>
                   {viewImageModal.originalImage && (
                     <div>
-                      <p style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--gov-text-muted)', marginBottom: '0.75rem', textTransform: 'uppercase' }}>Original Grievance</p>
+                      <p style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--gov-text-muted)', marginBottom: '0.75rem', textTransform: 'uppercase' }}>{t('admin.originalGrievance')}</p>
                       <img src={`http://localhost:5000${viewImageModal.originalImage}`} style={{ width: '100%', borderRadius: '16px', height: '400px', objectFit: 'cover' }} />
                     </div>
                   )}
                   <div>
-                    <p style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--gov-text-muted)', marginBottom: '0.75rem', textTransform: 'uppercase' }}>{viewImageModal.originalImage ? 'Resolution Proof' : 'Image Evidence'}</p>
+                    <p style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--gov-text-muted)', marginBottom: '0.75rem', textTransform: 'uppercase' }}>{viewImageModal.originalImage ? t('admin.resolutionProof') : t('admin.imageEvidence')}</p>
                     <img src={viewImageModal.image.startsWith('data:') ? viewImageModal.image : `http://localhost:5000${viewImageModal.image}`} style={{ width: '100%', borderRadius: '16px', height: '400px', objectFit: 'cover' }} />
                   </div>
                 </div>
 
-                {viewImageModal.title === 'Resolution Proof' && (
+                {viewImageModal.title === t('admin.resolutionVerification') && (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginTop: '2rem' }}>
                     <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '16px', textAlign: 'center' }}>
-                      <p style={{ fontSize: '0.6rem', fontWeight: 800, color: '#64748b', marginBottom: '0.5rem', textTransform: 'uppercase' }}>AI Integrity</p>
-                      <div style={{ color: viewImageModal.isAi ? '#ef4444' : '#10b981', fontWeight: 800 }}>{viewImageModal.isAi ? 'FAILED' : 'AUTHENTIC'}</div>
+                      <p style={{ fontSize: '0.6rem', fontWeight: 800, color: '#64748b', marginBottom: '0.5rem', textTransform: 'uppercase' }}>{t('admin.aiIntegrity')}</p>
+                      <div style={{ color: viewImageModal.isAi ? '#ef4444' : '#10b981', fontWeight: 800 }}>{viewImageModal.isAi ? t('admin.failed') : t('admin.authentic')}</div>
                     </div>
                     <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '16px', textAlign: 'center' }}>
-                      <p style={{ fontSize: '0.6rem', fontWeight: 800, color: '#64748b', marginBottom: '0.5rem', textTransform: 'uppercase' }}>Similarity</p>
-                      <div style={{ color: 'var(--gov-navy)', fontWeight: 800 }}>{(viewImageModal.similarity * 100).toFixed(0)}% Match</div>
+                      <p style={{ fontSize: '0.6rem', fontWeight: 800, color: '#64748b', marginBottom: '0.5rem', textTransform: 'uppercase' }}>{t('admin.similarity')}</p>
+                      <div style={{ color: viewImageModal.isMatch ? '#10b981' : '#ef4444', fontWeight: 800 }}>{Math.min(100, viewImageModal.similarity).toFixed(0)}% {t('admin.matchScore')}</div>
                     </div>
                     <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '16px', textAlign: 'center' }}>
-                      <p style={{ fontSize: '0.6rem', fontWeight: 800, color: '#64748b', marginBottom: '0.5rem', textTransform: 'uppercase' }}>GPS Status</p>
-                      <div style={{ color: '#10b981', fontWeight: 800 }}>VERIFIED</div>
+                      <p style={{ fontSize: '0.6rem', fontWeight: 800, color: '#64748b', marginBottom: '0.5rem', textTransform: 'uppercase' }}>{t('admin.gpsStatus')}</p>
+                      <div style={{ color: '#10b981', fontWeight: 800 }}>{t('admin.verified')}</div>
                     </div>
                   </div>
                 )}
@@ -687,14 +802,14 @@ const Dashboard = ({ user }) => {
           <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(10px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
             <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} style={{ background: 'white', borderRadius: '32px', padding: '2.5rem', maxWidth: '450px', width: '100%' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-                <h3 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 900, color: 'var(--gov-navy)' }}>Edit Coordinates</h3>
+                <h3 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 900, color: 'var(--gov-navy)' }}>{t('admin.editCoords')}</h3>
                 <button onClick={() => setEditCoordsModal({ open: false })} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
                   <X size={24} color="var(--gov-text-muted)" />
                 </button>
               </div>
 
               <div style={{ marginBottom: '1.5rem' }}>
-                <label className="form-label">Latitude</label>
+                <label className="form-label">{t('admin.latitude')}</label>
                 <input
                   type="number"
                   step="any"
@@ -706,7 +821,7 @@ const Dashboard = ({ user }) => {
               </div>
 
               <div style={{ marginBottom: '2.5rem' }}>
-                <label className="form-label">Longitude</label>
+                <label className="form-label">{t('admin.longitude')}</label>
                 <input
                   type="number"
                   step="any"
@@ -718,7 +833,7 @@ const Dashboard = ({ user }) => {
               </div>
 
               <div style={{ marginBottom: '2.5rem' }}>
-                <label className="form-label">Pick on Map</label>
+                <label className="form-label">{t('admin.pickOnMap')}</label>
                 <MapPicker
                   initialPos={editCoordsModal.lat && editCoordsModal.lon ? [parseFloat(editCoordsModal.lat), parseFloat(editCoordsModal.lon)] : [20.5937, 78.9629]}
                   onLocationSelect={(data) => setEditCoordsModal({ ...editCoordsModal, lat: data.lat.toString(), lon: data.lon.toString() })}
@@ -726,8 +841,8 @@ const Dashboard = ({ user }) => {
               </div>
 
               <div style={{ display: 'flex', gap: '1rem' }}>
-                <button onClick={() => setEditCoordsModal({ open: false })} className="btn-gov-secondary" style={{ flex: 1 }}>Cancel</button>
-                <button onClick={handleUpdateCoords} className="btn-gov-primary" style={{ flex: 2 }}>Update Location</button>
+                <button onClick={() => setEditCoordsModal({ open: false })} className="btn-gov-secondary" style={{ flex: 1 }}>{t('admin.cancel')}</button>
+                <button onClick={handleUpdateCoords} className="btn-gov-primary" style={{ flex: 2 }}>{t('admin.updateLocation')}</button>
               </div>
             </motion.div>
           </div>

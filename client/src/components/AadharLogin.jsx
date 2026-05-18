@@ -238,5 +238,3 @@ const AadharLogin = ({ onLogin }) => {
 };
 
 export default AadharLogin;
-
-export default AadharLogin;
